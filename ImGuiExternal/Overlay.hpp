@@ -75,7 +75,7 @@ void drawStrokeText(int x, int y, RGBA* color, const char* str) {
 	ImGui::GetForegroundDrawList()->AddText(ImVec2(x, y), ImGui::ColorConvertFloat4ToU32(ImVec4(color->R / 255.0, color->G / 255.0, color->B / 255.0, color->A / 255.0)), utf_8_2.c_str());
 }
 
-void DrawLine(Vector2 pos1, Vector2 pos2, ImColor color, float Thicknes, bool checkpoints) {
+void DrawLine(fvector2d pos1, fvector2d pos2, ImColor color, float Thicknes, bool checkpoints) {
 	if (checkpoints) {
 		if (pos1.x >= 0 && pos1.y >= 0 && pos1.x <= widthscreen && pos1.y <= heightscreen && pos2.x >= 0 && pos2.y >= 0 && pos2.x <= widthscreen && pos2.y <= heightscreen) {
 			ImGui::GetBackgroundDrawList()->AddLine(ImVec2(pos1.x, pos1.y), ImVec2(pos2.x, pos2.y), ImColor(0, 0, 0), Thicknes + 2);
@@ -127,4 +127,65 @@ void drawbox(Vector2 pos, float height, float width, ImColor color, float thickn
 
 void DrawT(Vector2 pos, const char* text, float divide, ImColor color) {
 	ImGui::GetBackgroundDrawList()->AddText(ImVec2(pos.x - ImGui::CalcTextSize(text).x / 2, pos.y - (ImGui::CalcTextSize(text).y / divide)), color, text);
+}
+
+void DrawBones(DWORD64 sekeltalmesh) {
+    if (!sekeltalmesh) {
+        throw std::runtime_error("Mesh is not valid.");
+    }
+
+    try {
+        fvector2d head = w2s(get_bone_3d(sekeltalmesh, bone::head));
+        fvector2d neck = w2s(get_bone_3d(sekeltalmesh, bone::neck));
+        fvector2d chest = w2s(get_bone_3d(sekeltalmesh, bone::chest));
+        fvector2d stomach = w2s(get_bone_3d(sekeltalmesh, bone::stomage));
+        fvector2d up_penis = w2s(get_bone_3d(sekeltalmesh, bone::up_penis));
+        fvector2d penis = w2s(get_bone_3d(sekeltalmesh, bone::penis));
+
+        fvector2d left_shoulder = w2s(get_bone_3d(sekeltalmesh, bone::left_shoulder));
+        fvector2d left_elbow = w2s(get_bone_3d(sekeltalmesh, bone::left_elbow));
+        fvector2d left_hand = w2s(get_bone_3d(sekeltalmesh, bone::left_hand));
+
+        fvector2d right_shoulder = w2s(get_bone_3d(sekeltalmesh, bone::right_shoulder));
+        fvector2d right_elbow = w2s(get_bone_3d(sekeltalmesh, bone::right_elbow));
+        fvector2d right_hand = w2s(get_bone_3d(sekeltalmesh, bone::right_hand));
+
+        fvector2d left_pelvis = w2s(get_bone_3d(sekeltalmesh, bone::left_pelvis));
+        fvector2d left_knee = w2s(get_bone_3d(sekeltalmesh, bone::left_knee));
+        fvector2d left_foot_up = w2s(get_bone_3d(sekeltalmesh, bone::left_foot_up));
+        fvector2d left_foot = w2s(get_bone_3d(sekeltalmesh, bone::left_foot));
+
+        fvector2d right_pelvis = w2s(get_bone_3d(sekeltalmesh, bone::right_pelvis));
+        fvector2d right_knee = w2s(get_bone_3d(sekeltalmesh, bone::right_knee));
+        fvector2d right_foot_up = w2s(get_bone_3d(sekeltalmesh, bone::right_foot_up));
+        fvector2d right_foot = w2s(get_bone_3d(sekeltalmesh, bone::right_foot));
+
+       
+        DrawLine(head, neck, ImColor(255, 0, 0), 1, true);
+        DrawLine(neck, chest, ImColor(255, 0, 0), 1, true);
+        DrawLine(chest, stomach, ImColor(255, 0, 0), 1, true);
+        DrawLine(stomach, up_penis, ImColor(255, 0, 0), 1, true);
+        DrawLine(up_penis, penis, ImColor(255, 0, 0), 1, true);
+
+        DrawLine(neck, left_shoulder, ImColor(255, 0, 0), 1, true);
+        DrawLine(left_shoulder, left_elbow, ImColor(255, 0, 0), 1, true);
+        DrawLine(left_elbow, left_hand, ImColor(255, 0, 0), 1, true);
+
+        DrawLine(neck, right_shoulder, ImColor(255, 0, 0), 1, true);
+        DrawLine(right_shoulder, right_elbow, ImColor(255, 0, 0), 1, true);
+        DrawLine(right_elbow, right_hand, ImColor(255, 0, 0), 1, true);
+
+        DrawLine(penis, left_pelvis, ImColor(255, 0, 0), 1, true);
+        DrawLine(left_pelvis, left_knee, ImColor(255, 0, 0), 1, true);
+        DrawLine(left_knee, left_foot_up, ImColor(255, 0, 0), 1, true);
+        DrawLine(left_foot_up, left_foot, ImColor(255, 0, 0), 1, true);
+
+        DrawLine(penis, right_pelvis, ImColor(255, 0, 0), 1, true);
+        DrawLine(right_pelvis, right_knee, ImColor(255, 0, 0), 1, true);
+        DrawLine(right_knee, right_foot_up, ImColor(255, 0, 0), 1, true);
+        DrawLine(right_foot_up, right_foot, ImColor(255, 0, 0), 1, true);
+    }
+    catch (const std::exception& e) {
+        std::cerr << "Error al dibujar los huesos: " << e.what() << std::endl;
+    }
 }

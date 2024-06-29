@@ -1,12 +1,12 @@
 #include "include.h"
 
 bool esp = false;
+bool team = false;
 
 bool isInitialized = false;
 bool isMenuVisible = true;
 
 bool there = false;
-char number[30];
 
 struct WindowInfo {
 	int Width;
@@ -63,69 +63,55 @@ void renderImGui() {
 		drawItem();
 		ImGui::Begin("NOVA");
 		ImGui::Checkbox("esp", &esp);
+		if (esp)
+			ImGui::Checkbox("Ignore Team", &team);
 		ImGui::Text("%d", there);
 		ImGui::End();
 		SetFocus(overlayWindow);
 	}
 	if (esp) {
 		if (ReadValues()) {
-			int Num; 
-			if (read<int>(adresses.game_state, (0x2A8 + sizeof(uintptr_t)), Num)) {
-				Num -= 1;
+			int numPlayers;
+			if (read<int>(adresses.game_state, (0x2A8 + sizeof(uintptr_t)), numPlayers)) {
 				int ackteamid;
 				if (read<int>(adresses.acknowledged_pawn, 0x1000, ackteamid)) {
-					for (int i = 0; i < Num; i++) {
-						DWORD64 player_state;
-						if (!read<DWORD64>(adresses.player_array, (i * sizeof(uintptr_t)),player_state))
-							continue;
-						DWORD64 current_actor;
-						if (!read<DWORD64>(player_state, offset::pawn_private, current_actor))
-							continue;
-						DWORD64 skeletalmesh;
-						if (!read<DWORD64>(current_actor, offset::skeletal_mesh, skeletalmesh))
-							continue;
+					for (int i = 0; i < numPlayers; ++i) {
+						DWORD64 playerState;
+						if (!read<DWORD64>(adresses.player_array, (i * sizeof(uintptr_t)), playerState)) continue;
 
-						if (!adresses.acknowledged_pawn)
-							continue;
+						DWORD64 currentPlayerActor;
+						if (!read<DWORD64>(playerState, offset::pawn_private, currentPlayerActor)) continue;
 
-						if (current_actor == adresses.acknowledged_pawn) continue;
+						DWORD64 skeletalMesh;
+						if (!read<DWORD64>(currentPlayerActor, offset::skeletal_mesh, skeletalMesh)) continue;
 
-						name = (Name*)(player_state);
-						
-						if (name == nullptr)
-							continue;
+						if (!adresses.acknowledged_pawn || currentPlayerActor == adresses.acknowledged_pawn) continue;
 
-						DWORD64 WW_SurvivorStatus;
-						if (!read<DWORD64>(current_actor, 0x0638, WW_SurvivorStatus))
-							continue;
+						name = reinterpret_cast<Name*>(playerState);
+						if (!name) continue;
+
+						DWORD64 survivorStatus;
+						if (!read<DWORD64>(currentPlayerActor, 0x0638, survivorStatus)) continue;
 
 						double health;
-						if (!read<double>(WW_SurvivorStatus, 0x00B0, health))
-							continue;
+						if (!read<double>(survivorStatus, 0x00B0, health)) continue;
+
+						if (health < 1) continue;
+
 						there = true;
 
-						if (!skeletalmesh) continue;
-						fvector base = get_bone_3d(skeletalmesh, bone::Root);
+						int teamIndex;
+						if (!read<int>(currentPlayerActor, 0x1000, teamIndex)) continue;
+
+						if (team && teamIndex == ackteamid) continue;
+
+						if (!skeletalMesh) continue;
+						fvector base = get_bone_3d(skeletalMesh, bone::Root);
 						if (base.x == 0 && base.y == 0 && base.z == 0) continue;
-						int team_index;
-						if (!read<int>(current_actor, 0x1000, team_index))
-							continue;
-
-						if (team_index == ackteamid)
-							continue;
-
 						fvector2d root = w2s(base);
 
-						ImGui::GetBackgroundDrawList()->AddLine(ImVec2(1920 / 2, 1080 / 2), ImVec2(root.x, root.y), ImColor(255, 255, 255), 0);
-						for (int j = 1; j < 92; j++) {
-							if (!skeletalmesh) continue;
-							fvector base1 = get_bone_3d(skeletalmesh, j);
-							if (base1.x == 0 && base1.y == 0 && base1.z == 0) continue;
-
-							fvector2d root1 = w2s(base1);
-
-							sprintf_s(number, sizeof(number), "%d", j);
-							ImGui::GetBackgroundDrawList()->AddText(ImVec2(root1.x - ImGui::CalcTextSize(number).x / 2, root1.y), ImColor(255, 255, 255), number);
+						if (root.x > 0 && root.y > 0 && root.x < 1920 && root.y < 1080) {
+							DrawBones(skeletalMesh);
 						}
 					}
 				}
