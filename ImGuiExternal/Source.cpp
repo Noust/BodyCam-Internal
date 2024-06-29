@@ -91,7 +91,7 @@ void renderImGui() {
 						if (current_actor == adresses.acknowledged_pawn) continue;
 
 						name = (Name*)(player_state);
-
+						
 						if (name == nullptr)
 							continue;
 
