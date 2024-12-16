@@ -146,6 +146,7 @@ void renderImGui() {
 	if (esp) {
 		if (ReadValues()) {
 			int numPlayers;
+            there = true;
 			if (read<int>(adresses.game_state + (0x2A8 + sizeof(uintptr_t)), numPlayers)) {
 				int ackteamid;
 				read<int>(adresses.acknowledged_pawn + 0x1000, ackteamid);
