@@ -95,8 +95,11 @@ void drawNewText(int x, int y, RGBA* color, const char* str) {
 	ImGui::GetForegroundDrawList()->AddText(ImVec2(x, y), ImGui::ColorConvertFloat4ToU32(ImVec4(color->R / 255.0, color->G / 255.0, color->B / 255.0, color->A / 255.0)), utf_8_2.c_str());
 }
 
-void DrawCircle(Vector2 pos, int radious, int thickness, ImColor color) {
-	ImGui::GetBackgroundDrawList()->AddCircle(ImVec2(pos.x, pos.y), radious, color, 0, thickness);
+void DrawCircle(fvector2d pos, int radious, int thickness, ImColor color) {
+    if (pos.x >= 0 && pos.y >= 0 && pos.x <= widthscreen && pos.y <= heightscreen) {
+        ImGui::GetBackgroundDrawList()->AddCircle(ImVec2(pos.x, pos.y), radious, ImColor(0, 0, 0), 0, thickness + 2);
+        ImGui::GetBackgroundDrawList()->AddCircle(ImVec2(pos.x, pos.y), radious, color, 0, thickness);
+    }
 }
 
 void DrawCornerEsp(float W, float H, Vector2 pos, ImColor color, int thickness) {
@@ -118,21 +121,23 @@ void DrawFilledRect(Vector2 pos, float height, float width, ImColor color) {
 	ImGui::GetBackgroundDrawList()->AddRectFilled({ pos.x - width,pos.y - height }, { pos.x + width, pos.y }, color);
 }
 
-void drawbox(Vector2 pos, float height, float width, ImColor color, float thickness) {
+void drawbox(fvector2d pos, float height, float width, ImColor color, float thickness) {
 	DrawLine({ pos.x + width, pos.y }, { pos.x - width,pos.y }, color, thickness, false);
 	DrawLine({ pos.x + width, pos.y }, { pos.x + width,pos.y - height }, color, thickness, false);
 	DrawLine({ pos.x + width,pos.y - height }, { pos.x - width,pos.y - height }, color, thickness, false);
 	DrawLine({ pos.x - width,pos.y - height }, { pos.x - width,pos.y }, color, thickness, false);
 }
 
-void DrawT(Vector2 pos, const char* text, float divide, ImColor color) {
+void DrawT(fvector2d pos, const char* text, float divide, ImColor color) {
 	ImGui::GetBackgroundDrawList()->AddText(ImVec2(pos.x - ImGui::CalcTextSize(text).x / 2, pos.y - (ImGui::CalcTextSize(text).y / divide)), color, text);
 }
 
-void DrawBones(DWORD64 sekeltalmesh) {
+void DrawBones(DWORD64 sekeltalmesh, bool visible) {
     if (!sekeltalmesh) {
         throw std::runtime_error("Mesh is not valid.");
     }
+
+    ImColor color = visible == true ? ImColor(0, 255, 0) : ImColor(255, 0, 0);
 
     try {
         fvector2d head = w2s(get_bone_3d(sekeltalmesh, bone::head));
@@ -160,30 +165,32 @@ void DrawBones(DWORD64 sekeltalmesh) {
         fvector2d right_foot_up = w2s(get_bone_3d(sekeltalmesh, bone::right_foot_up));
         fvector2d right_foot = w2s(get_bone_3d(sekeltalmesh, bone::right_foot));
 
-       
-        DrawLine(head, neck, ImColor(255, 0, 0), 1, true);
-        DrawLine(neck, chest, ImColor(255, 0, 0), 1, true);
-        DrawLine(chest, stomach, ImColor(255, 0, 0), 1, true);
-        DrawLine(stomach, up_penis, ImColor(255, 0, 0), 1, true);
-        DrawLine(up_penis, penis, ImColor(255, 0, 0), 1, true);
 
-        DrawLine(neck, left_shoulder, ImColor(255, 0, 0), 1, true);
-        DrawLine(left_shoulder, left_elbow, ImColor(255, 0, 0), 1, true);
-        DrawLine(left_elbow, left_hand, ImColor(255, 0, 0), 1, true);
+        float radio = (neck.y - head.y) * 1.8f;
+        DrawCircle(head, radio, 0, color);
+        DrawLine(head, neck, color, 0, true);
+        DrawLine(neck, chest, color, 0, true);
+        DrawLine(chest, stomach, color, 0, true);
+        DrawLine(stomach, up_penis, color, 0, true);
+        DrawLine(up_penis, penis, color, 0, true);
 
-        DrawLine(neck, right_shoulder, ImColor(255, 0, 0), 1, true);
-        DrawLine(right_shoulder, right_elbow, ImColor(255, 0, 0), 1, true);
-        DrawLine(right_elbow, right_hand, ImColor(255, 0, 0), 1, true);
+        DrawLine(neck, left_shoulder, color, 0, true);
+        DrawLine(left_shoulder, left_elbow, color, 0, true);
+        DrawLine(left_elbow, left_hand, color, 0, true);
 
-        DrawLine(penis, left_pelvis, ImColor(255, 0, 0), 1, true);
-        DrawLine(left_pelvis, left_knee, ImColor(255, 0, 0), 1, true);
-        DrawLine(left_knee, left_foot_up, ImColor(255, 0, 0), 1, true);
-        DrawLine(left_foot_up, left_foot, ImColor(255, 0, 0), 1, true);
+        DrawLine(neck, right_shoulder, color, 0, true);
+        DrawLine(right_shoulder, right_elbow, color, 0, true);
+        DrawLine(right_elbow, right_hand, color, 0, true);
 
-        DrawLine(penis, right_pelvis, ImColor(255, 0, 0), 1, true);
-        DrawLine(right_pelvis, right_knee, ImColor(255, 0, 0), 1, true);
-        DrawLine(right_knee, right_foot_up, ImColor(255, 0, 0), 1, true);
-        DrawLine(right_foot_up, right_foot, ImColor(255, 0, 0), 1, true);
+        DrawLine(penis, left_pelvis, color, 0, true);
+        DrawLine(left_pelvis, left_knee, color, 0, true);
+        DrawLine(left_knee, left_foot_up, color, 0, true);
+        DrawLine(left_foot_up, left_foot, color, 0, true);
+
+        DrawLine(penis, right_pelvis, color, 0, true);
+        DrawLine(right_pelvis, right_knee, color, 0, true);
+        DrawLine(right_knee, right_foot_up, color, 0, true);
+        DrawLine(right_foot_up, right_foot, color, 0, true);
     }
     catch (const std::exception& e) {
         std::cerr << "Error al dibujar los huesos: " << e.what() << std::endl;

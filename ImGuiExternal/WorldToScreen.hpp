@@ -7,10 +7,12 @@ struct camera_position_s {
 	float fov{};
 };
 inline camera_position_s camera_postion{};
+camera_position_s camera;
 
 struct FNRot {
 	double a, b, c;
 };
+FNRot fnRot;
 
 fvector get_bone_3d(uintptr_t skeletal_mesh, int bone_index)
 {
@@ -40,15 +42,12 @@ camera_position_s get_camera() {
 		return {};
 	}
 
-	camera_position_s camera;
-
 	DWORD64 location_pointer = *(DWORD64*)(adresses.uworld + 0x110);
 	DWORD64 rotation_pointer = *(DWORD64*)(adresses.uworld + 0x120);
 
 	if (!location_pointer || !rotation_pointer)
 		return {};
 
-	FNRot fnRot;
 	fnRot.a = *(double*)(rotation_pointer);
 	fnRot.b = *(double*)(rotation_pointer + 0x20);
 	fnRot.c = *(double*)(rotation_pointer + 0x1d0);
@@ -61,10 +60,16 @@ camera_position_s get_camera() {
 	return camera;
 }
 
-inline fvector2d w2s(fvector WorldLocation) {
-	camera_postion = get_camera();
+bool is_visible(uintptr_t skeletal_mesh) {
+	//despues de BoundsScale
+	float last_submit = *(float*)(skeletal_mesh + 0x358);  // 0x358
+	float last_render = *(float*)(skeletal_mesh + 0x360);  // 0x360
+	return (bool)(last_render + 0.06f >= last_submit);
+}
 
-	if (WorldLocation.x == 0)
+inline fvector2d w2s(fvector WorldLocation) {
+
+	if (WorldLocation.x == 0 || WorldLocation.y == 0 || WorldLocation.z == 0)
 		return fvector2d(0, 0);
 
 	_MATRIX tempMatrix = Matrix(camera_postion.rotation);
@@ -110,6 +115,4 @@ enum bone : uint32_t {
 	left_shoulder = 31,
 	left_elbow = 7,
 	left_hand = 25,
-
-
 };

@@ -5,8 +5,79 @@ bool team = false;
 
 bool isInitialized = false;
 bool isMenuVisible = true;
+char cdistance[25];
+char chealth[25];
+float distancelimit = 50;
 
 bool there = false;
+
+void Colors() {
+	ImGuiStyle& style = ImGui::GetStyle();
+	style.WindowPadding = ImVec2(11, 12);
+	style.FrameRounding = 4.0f;
+	style.ItemSpacing = { 14.0f,4.0f };
+	style.ScrollbarSize = 11.0f;
+	style.WindowBorderSize = 0.0f;
+	style.WindowRounding = 12.0f;
+	style.ChildRounding = 12.0f;
+	style.ScrollbarRounding = 12.0f;
+	style.WindowTitleAlign = { 0.50f,0.50f };
+
+	style.Colors[ImGuiCol_Text] = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
+	style.Colors[ImGuiCol_TextDisabled] = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
+	style.Colors[ImGuiCol_WindowBg] = ImVec4(0.10f, 0.10f, 0.10f, 1.00f);
+	style.Colors[ImGuiCol_ChildBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+	style.Colors[ImGuiCol_PopupBg] = ImVec4(0.19f, 0.19f, 0.19f, 0.92f);
+	style.Colors[ImGuiCol_Border] = ImVec4(0.19f, 0.19f, 0.19f, 0.29f);
+	style.Colors[ImGuiCol_BorderShadow] = ImVec4(0.00f, 0.00f, 0.00f, 0.24f);
+	style.Colors[ImGuiCol_FrameBg] = ImVec4(0.05f, 0.05f, 0.05f, 0.54f);
+	style.Colors[ImGuiCol_FrameBgHovered] = ImVec4(0.19f, 0.19f, 0.19f, 0.54f);
+	style.Colors[ImGuiCol_FrameBgActive] = ImVec4(0.20f, 0.22f, 0.23f, 1.00f);
+	style.Colors[ImGuiCol_TitleBg] = ImVec4(0.00f, 0.00f, 0.00f, 1.00f);
+	style.Colors[ImGuiCol_TitleBgActive] = ImVec4(0.06f, 0.06f, 0.06f, 1.00f);
+	style.Colors[ImGuiCol_TitleBgCollapsed] = ImVec4(0.00f, 0.00f, 0.00f, 1.00f);
+	style.Colors[ImGuiCol_MenuBarBg] = ImVec4(0.14f, 0.14f, 0.14f, 1.00f);
+	style.Colors[ImGuiCol_ScrollbarBg] = ImVec4(0.05f, 0.05f, 0.05f, 0.54f);
+	style.Colors[ImGuiCol_ScrollbarGrab] = ImVec4(0.34f, 0.34f, 0.34f, 0.54f);
+	style.Colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.40f, 0.40f, 0.40f, 0.54f);
+	style.Colors[ImGuiCol_ScrollbarGrabActive] = ImVec4(0.56f, 0.56f, 0.56f, 0.54f);
+	style.Colors[ImGuiCol_CheckMark] = ImVec4(0.33f, 0.67f, 0.86f, 1.00f);
+	style.Colors[ImGuiCol_SliderGrab] = ImVec4(0.34f, 0.34f, 0.34f, 0.54f);
+	style.Colors[ImGuiCol_SliderGrabActive] = ImVec4(0.56f, 0.56f, 0.56f, 0.54f);
+	style.Colors[ImGuiCol_Button] = ImVec4(0.05f, 0.05f, 0.05f, 0.54f);
+	style.Colors[ImGuiCol_ButtonHovered] = ImVec4(0.19f, 0.19f, 0.19f, 0.54f);
+	style.Colors[ImGuiCol_ButtonActive] = ImVec4(0.20f, 0.22f, 0.23f, 1.00f);
+	style.Colors[ImGuiCol_Header] = ImVec4(0.00f, 0.00f, 0.00f, 0.52f);
+	style.Colors[ImGuiCol_HeaderHovered] = ImVec4(0.00f, 0.00f, 0.00f, 0.36f);
+	style.Colors[ImGuiCol_HeaderActive] = ImVec4(0.20f, 0.22f, 0.23f, 0.33f);
+	style.Colors[ImGuiCol_Separator] = ImVec4(0.28f, 0.28f, 0.28f, 0.29f);
+	style.Colors[ImGuiCol_SeparatorHovered] = ImVec4(0.44f, 0.44f, 0.44f, 0.29f);
+	style.Colors[ImGuiCol_SeparatorActive] = ImVec4(0.40f, 0.44f, 0.47f, 1.00f);
+	style.Colors[ImGuiCol_ResizeGrip] = ImVec4(0.28f, 0.28f, 0.28f, 0.29f);
+	style.Colors[ImGuiCol_ResizeGripHovered] = ImVec4(0.44f, 0.44f, 0.44f, 0.29f);
+	style.Colors[ImGuiCol_ResizeGripActive] = ImVec4(0.40f, 0.44f, 0.47f, 1.00f);
+	style.Colors[ImGuiCol_Tab] = ImVec4(0.00f, 0.00f, 0.00f, 0.52f);
+	style.Colors[ImGuiCol_TabHovered] = ImVec4(0.14f, 0.14f, 0.14f, 1.00f);
+	style.Colors[ImGuiCol_TabActive] = ImVec4(0.20f, 0.20f, 0.20f, 0.36f);
+	style.Colors[ImGuiCol_TabUnfocused] = ImVec4(0.00f, 0.00f, 0.00f, 0.52f);
+	style.Colors[ImGuiCol_TabUnfocusedActive] = ImVec4(0.14f, 0.14f, 0.14f, 1.00f);
+	style.Colors[ImGuiCol_PlotLines] = ImVec4(1.00f, 0.00f, 0.00f, 1.00f);
+	style.Colors[ImGuiCol_PlotLinesHovered] = ImVec4(1.00f, 0.00f, 0.00f, 1.00f);
+	style.Colors[ImGuiCol_PlotHistogram] = ImVec4(1.00f, 0.00f, 0.00f, 1.00f);
+	style.Colors[ImGuiCol_PlotHistogramHovered] = ImVec4(1.00f, 0.00f, 0.00f, 1.00f);
+	style.Colors[ImGuiCol_TableHeaderBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.52f);
+	style.Colors[ImGuiCol_TableBorderStrong] = ImVec4(0.00f, 0.00f, 0.00f, 0.52f);
+	style.Colors[ImGuiCol_TableBorderLight] = ImVec4(0.28f, 0.28f, 0.28f, 0.29f);
+	style.Colors[ImGuiCol_TableRowBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+	style.Colors[ImGuiCol_TableRowBgAlt] = ImVec4(1.00f, 1.00f, 1.00f, 0.06f);
+	style.Colors[ImGuiCol_TextSelectedBg] = ImVec4(0.20f, 0.22f, 0.23f, 1.00f);
+	style.Colors[ImGuiCol_DragDropTarget] = ImVec4(0.33f, 0.67f, 0.86f, 1.00f);
+	style.Colors[ImGuiCol_NavHighlight] = ImVec4(1.00f, 0.00f, 0.00f, 1.00f);
+	style.Colors[ImGuiCol_NavWindowingHighlight] = ImVec4(1.00f, 0.00f, 0.00f, 0.70f);
+	style.Colors[ImGuiCol_NavWindowingDimBg] = ImVec4(1.00f, 0.00f, 0.00f, 0.20f);
+	style.Colors[ImGuiCol_ModalWindowDimBg] = ImVec4(1.00f, 0.00f, 0.00f, 0.35f);
+
+}
 
 struct WindowInfo {
 	int Width;
@@ -52,6 +123,7 @@ void renderImGui() {
 		ImGui::GetIO().MouseDrawCursor = isMenuVisible;
 	}
 
+	Colors();
 	ImGui_ImplDX9_NewFrame();
 	ImGui_ImplWin32_NewFrame();
 	ImGui::NewFrame();
@@ -61,10 +133,12 @@ void renderImGui() {
 	if (isMenuVisible) {
 		inputHandler();
 		drawItem();
-		ImGui::Begin("NOVA");
+		ImGui::Begin("NOVA", 0, ImGuiWindowFlags_NoCollapse);
 		ImGui::Checkbox("esp", &esp);
-		if (esp)
+		if (esp) {
 			ImGui::Checkbox("Ignore Team", &team);
+			ImGui::SliderFloat("Max Distance", &distancelimit, 10, 100, "%.f");
+		}
 		ImGui::Text("%d", there);
 		ImGui::End();
 		SetFocus(overlayWindow);
@@ -72,47 +146,58 @@ void renderImGui() {
 	if (esp) {
 		if (ReadValues()) {
 			int numPlayers;
-			if (read<int>(adresses.game_state, (0x2A8 + sizeof(uintptr_t)), numPlayers)) {
+			if (read<int>(adresses.game_state + (0x2A8 + sizeof(uintptr_t)), numPlayers)) {
 				int ackteamid;
-				if (read<int>(adresses.acknowledged_pawn, 0x1000, ackteamid)) {
-					for (int i = 0; i < numPlayers; ++i) {
-						DWORD64 playerState;
-						if (!read<DWORD64>(adresses.player_array, (i * sizeof(uintptr_t)), playerState)) continue;
+				read<int>(adresses.acknowledged_pawn + 0x1000, ackteamid);
+				for (int i = 0; i < numPlayers; ++i) {
+					DWORD64 playerState;
+					if (!read<DWORD64>(adresses.player_array + (i * sizeof(uintptr_t)), playerState)) continue;
 
-						DWORD64 currentPlayerActor;
-						if (!read<DWORD64>(playerState, offset::pawn_private, currentPlayerActor)) continue;
+					DWORD64 currentPlayerActor;
+					if (!read<DWORD64>(playerState + offset::pawn_private, currentPlayerActor)) continue;
 
-						DWORD64 skeletalMesh;
-						if (!read<DWORD64>(currentPlayerActor, offset::skeletal_mesh, skeletalMesh)) continue;
+					DWORD64 skeletalMesh;
+					if (!read<DWORD64>(currentPlayerActor + offset::skeletal_mesh, skeletalMesh)) continue;
 
-						if (!adresses.acknowledged_pawn || currentPlayerActor == adresses.acknowledged_pawn) continue;
+					if (!adresses.acknowledged_pawn || currentPlayerActor == adresses.acknowledged_pawn) continue;
 
-						name = reinterpret_cast<Name*>(playerState);
-						if (!name) continue;
+					name = reinterpret_cast<Name*>(playerState);
+					if (!name) continue;
 
-						DWORD64 survivorStatus;
-						if (!read<DWORD64>(currentPlayerActor, 0x0638, survivorStatus)) continue;
+					DWORD64 survivorStatus;
+					if (!read<DWORD64>(currentPlayerActor + 0x0638, survivorStatus)) continue;
 
-						double health;
-						if (!read<double>(survivorStatus, 0x00B0, health)) continue;
+					double health;
+					if (!read<double>(survivorStatus + 0x00B0, health)) continue;
 
-						if (health < 1) continue;
+					if (health < 1) continue;
 
-						there = true;
+					there = true;
 
-						int teamIndex;
-						if (!read<int>(currentPlayerActor, 0x1000, teamIndex)) continue;
+					int teamIndex;
+					if (!read<int>(currentPlayerActor + 0x1000, teamIndex) && team) continue;
 
-						if (team && teamIndex == ackteamid) continue;
+					if (team && teamIndex == ackteamid) continue;
 
-						if (!skeletalMesh) continue;
-						fvector base = get_bone_3d(skeletalMesh, bone::Root);
-						if (base.x == 0 && base.y == 0 && base.z == 0) continue;
-						fvector2d root = w2s(base);
+					camera_postion = get_camera();
 
-						if (root.x > 0 && root.y > 0 && root.x < 1920 && root.y < 1080) {
-							DrawBones(skeletalMesh);
-						}
+					if (!skeletalMesh) continue;
+					fvector base = get_bone_3d(skeletalMesh, bone::Root);
+					if (base.x == 0 && base.y == 0 && base.z == 0) continue;
+					fvector2d root = w2s(base);
+
+					float distance = camera_postion.location.distance(base) / 100;
+
+					if (distance > distancelimit)
+						continue;
+
+					sprintf_s(cdistance, sizeof(cdistance), "[%0.fm]", distance);
+					sprintf_s(chealth, sizeof(chealth), "HP:%0.f", health);
+
+					if (root.x > 0 && root.y > 0 && root.x < 1920 && root.y < 1080) {
+						DrawBones(skeletalMesh, is_visible(skeletalMesh));
+						DrawT(root, cdistance, 4, ImColor(255, 0, 0));
+						DrawT(root, chealth, 1, ImColor(255, 0, 0));
 					}
 				}
 			}
