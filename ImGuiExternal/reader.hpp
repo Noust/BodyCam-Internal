@@ -62,7 +62,7 @@ inline bool read(uintptr_t address, T& output) {
 }
 
 /*template<typename T>
-inline T read(uintptr_t address, const T& defaultValue = T()) {
+inline T readIn(uintptr_t address, const T& defaultValue = T()) {
     return MemoryReader<T>::ReadMemorySafe(address, defaultValue);
 }*/
 
@@ -169,7 +169,7 @@ public:
 
 // Funciones helper para uso más simple
 template<typename T>
-inline bool WriteMemSafe(uintptr_t address, const T& value) {
+inline bool write(uintptr_t address, const T& value) {
     return MemoryWriter<T>::WriteMemory(address, value);
 }
 
@@ -213,7 +213,7 @@ bool ReadValues() {
 
     if (!ReadLocalPlayer())
         return false;
-
+    there = true;
     if (!ReadPlayerController())
         return false;
 

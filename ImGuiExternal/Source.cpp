@@ -9,8 +9,6 @@ char cdistance[25];
 char chealth[25];
 float distancelimit = 50;
 
-bool there = false;
-
 void Colors() {
 	ImGuiStyle& style = ImGui::GetStyle();
 	style.WindowPadding = ImVec2(11, 12);
@@ -146,7 +144,6 @@ void renderImGui() {
 	if (esp) {
 		if (ReadValues()) {
 			int numPlayers;
-            there = true;
 			if (read<int>(adresses.game_state + (0x2A8 + sizeof(uintptr_t)), numPlayers)) {
 				int ackteamid;
 				read<int>(adresses.acknowledged_pawn + 0x1000, ackteamid);
@@ -172,8 +169,6 @@ void renderImGui() {
 					if (!read<double>(survivorStatus + 0x00B0, health)) continue;
 
 					if (health < 1) continue;
-
-					there = true;
 
 					int teamIndex;
 					if (!read<int>(currentPlayerActor + 0x1000, teamIndex) && team) continue;
