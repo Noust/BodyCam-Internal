@@ -8,6 +8,7 @@ bool isMenuVisible = true;
 char cdistance[25];
 char chealth[25];
 float distancelimit = 50;
+int numPlayers;
 
 void Colors() {
 	ImGuiStyle& style = ImGui::GetStyle();
@@ -131,19 +132,49 @@ void renderImGui() {
 	if (isMenuVisible) {
 		inputHandler();
 		drawItem();
+
 		ImGui::Begin("NOVA", 0, ImGuiWindowFlags_NoCollapse);
-		ImGui::Checkbox("esp", &esp);
-		if (esp) {
-			ImGui::Checkbox("Ignore Team", &team);
-			ImGui::SliderFloat("Max Distance", &distancelimit, 10, 100, "%.f");
+		
+		ImVec2 windowSize = ImGui::GetContentRegionAvail();
+		
+		if (ImGui::BeginTabBar("MainTabs")) {
+			if (ImGui::BeginTabItem("Visuals")) {
+				ImGui::BeginChild("VisualsChild", ImVec2(windowSize.x - 16, windowSize.y - 40), true);
+				
+				ImGui::Text("ESP Options");
+				ImGui::Separator();
+				
+				ImGui::Checkbox("Enable ESP", &esp);
+				if (esp) {
+					ImGui::Indent(20);
+					ImGui::Checkbox("Ignore Team Members", &team);
+					ImGui::SliderFloat("Max Distance", &distancelimit, 10, 100, "%.0f m");
+					ImGui::Unindent(20);
+				}
+				
+				ImGui::EndChild();
+				ImGui::EndTabItem();
+			}
+			
+			if (ImGui::BeginTabItem("Settings")) {
+				ImGui::BeginChild("SettingsChild", ImVec2(windowSize.x - 16, windowSize.y - 40), true);
+				
+				ImGui::Text("Debug Info");
+				ImGui::Separator();
+				ImGui::Text("Players Found: %d", numPlayers);
+				
+				ImGui::EndChild();
+				ImGui::EndTabItem();
+			}
+			
+			ImGui::EndTabBar();
 		}
-		ImGui::Text("%d", there);
+
 		ImGui::End();
 		SetFocus(overlayWindow);
 	}
 	if (esp) {
 		if (ReadValues()) {
-			int numPlayers;
 			if (read<int>(adresses.game_state + (0x2A8 + sizeof(uintptr_t)), numPlayers)) {
 				int ackteamid;
 				read<int>(adresses.acknowledged_pawn + 0x1000, ackteamid);
@@ -183,6 +214,8 @@ void renderImGui() {
 					fvector2d root = w2s(base);
 
 					float distance = camera_postion.location.distance(base) / 100;
+
+					there = true;
 
 					if (distance > distancelimit)
 						continue;

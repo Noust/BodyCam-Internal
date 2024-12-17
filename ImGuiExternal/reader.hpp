@@ -213,7 +213,7 @@ bool ReadValues() {
 
     if (!ReadLocalPlayer())
         return false;
-    there = true;
+        
     if (!ReadPlayerController())
         return false;
 
