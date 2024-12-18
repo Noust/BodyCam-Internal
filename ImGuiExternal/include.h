@@ -10,6 +10,7 @@
 #include <ImGui/imgui.h>
 #include <ImGui/imgui_impl_dx9.h>
 #include <ImGui/imgui_impl_win32.h>
+#include <string>
 #pragma comment(lib, "d3d9.lib")
 #pragma comment(lib, "dwmapi.lib")
 

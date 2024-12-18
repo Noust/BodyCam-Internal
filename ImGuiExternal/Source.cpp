@@ -2,6 +2,7 @@
 
 bool esp = false;
 bool team = false;
+static bool showHealth = true;
 
 bool isInitialized = false;
 bool isMenuVisible = true;
@@ -177,7 +178,7 @@ void renderImGui() {
 		if (ReadValues()) {
 			if (read<int>(adresses.game_state + (0x2A8 + sizeof(uintptr_t)), numPlayers)) {
 				int ackteamid;
-				read<int>(adresses.acknowledged_pawn + 0x1000, ackteamid);
+				read<int>(adresses.acknowledged_pawn + 0xFA0, ackteamid);
 				for (int i = 0; i < numPlayers; ++i) {
 					DWORD64 playerState;
 					if (!read<DWORD64>(adresses.player_array + (i * sizeof(uintptr_t)), playerState)) continue;
@@ -190,8 +191,8 @@ void renderImGui() {
 
 					if (!adresses.acknowledged_pawn || currentPlayerActor == adresses.acknowledged_pawn) continue;
 
-					name = reinterpret_cast<Name*>(playerState);
-					if (!name) continue;
+					//name = reinterpret_cast<Name*>(playerState);
+					//if (!name) continue;
 
 					DWORD64 survivorStatus;
 					if (!read<DWORD64>(currentPlayerActor + 0x0638, survivorStatus)) continue;
@@ -199,10 +200,16 @@ void renderImGui() {
 					double health;
 					if (!read<double>(survivorStatus + 0x00B0, health)) continue;
 
-					if (health < 1) continue;
+					if (health <= 0) {
+						showHealth = false;
+					} else if (health >= 100) {
+						showHealth = true;
+					}
+
+					if (!showHealth) continue;
 
 					int teamIndex;
-					if (!read<int>(currentPlayerActor + 0x1000, teamIndex) && team) continue;
+					if (!read<int>(currentPlayerActor + 0xFA0, teamIndex) && team) continue;
 
 					if (team && teamIndex == ackteamid) continue;
 

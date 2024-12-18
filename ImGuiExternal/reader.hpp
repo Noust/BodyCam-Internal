@@ -22,8 +22,7 @@ public:
 
         __try {
             // Verifica que la memoria sea legible
-            volatile T* ptr = reinterpret_cast<T*>(address);
-            T temp = *ptr; // Intenta leer
+            const T* ptr = reinterpret_cast<const T*>(address);
             
             // Verifica alineación de memoria
             if (reinterpret_cast<uintptr_t>(ptr) % alignof(T) != 0) {
@@ -41,7 +40,8 @@ public:
                 return false;
             }
 
-            output = temp;
+            // Usa memcpy para copiar el valor de forma segura
+            memcpy(&output, ptr, sizeof(T));
             return true;
         }
         __except (EXCEPTION_EXECUTE_HANDLER) {

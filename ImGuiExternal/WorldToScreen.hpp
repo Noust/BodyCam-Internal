@@ -16,8 +16,13 @@ FNRot fnRot;
 
 fvector get_bone_3d(uintptr_t skeletal_mesh, int bone_index)
 {
-	DWORD64 bonearray = *(DWORD64*)(skeletal_mesh + 0x610);
-	DWORD64 bonearray2 = *(DWORD64*)(skeletal_mesh + 0x620);
+	DWORD64 bonearray;
+	DWORD64 bonearray2;
+	
+	if (!read<DWORD64>(skeletal_mesh + 0x610, bonearray) || 
+		!read<DWORD64>(skeletal_mesh + 0x620, bonearray2)) {
+		return fvector(0, 0, 0);
+	}
 
 	DWORD64 temp_bone_ptr = !bonearray ? bonearray2 : bonearray;
 
@@ -36,14 +41,19 @@ fvector get_bone_3d(uintptr_t skeletal_mesh, int bone_index)
 	return fvector(Matrix._41, Matrix._42, Matrix._43);
 }
 
-
 camera_position_s get_camera() {
-	if (!adresses.uworld || !offset::game_instance || !offset::local_player || !offset::player_controller || !adresses.player_controller) {
+	if (!adresses.uworld || !offset::game_instance || !offset::local_player || 
+		!offset::player_controller || !adresses.player_controller) {
 		return {};
 	}
 
-	DWORD64 location_pointer = *(DWORD64*)(adresses.uworld + 0x110);
-	DWORD64 rotation_pointer = *(DWORD64*)(adresses.uworld + 0x120);
+	DWORD64 location_pointer;
+	DWORD64 rotation_pointer;
+	
+	if (!read<DWORD64>(adresses.uworld + 0x110, location_pointer) ||
+		!read<DWORD64>(adresses.uworld + 0x120, rotation_pointer)) {
+		return {};
+	}
 
 	if (!location_pointer || !rotation_pointer)
 		return {};
@@ -61,9 +71,14 @@ camera_position_s get_camera() {
 }
 
 bool is_visible(uintptr_t skeletal_mesh) {
-	//despues de BoundsScale
-	float last_submit = *(float*)(skeletal_mesh + 0x358);  // 0x358
-	float last_render = *(float*)(skeletal_mesh + 0x360);  // 0x360
+	float last_submit;
+	float last_render;
+	
+	if (!read<float>(skeletal_mesh + 0x358, last_submit) ||
+		!read<float>(skeletal_mesh + 0x360, last_render)) {
+		return false;
+	}
+	
 	return (bool)(last_render + 0.06f >= last_submit);
 }
 
@@ -95,24 +110,24 @@ inline fvector2d w2s(fvector WorldLocation) {
 
 enum bone : uint32_t {
 	Root = 0,
-	left_foot = 69,
-	left_foot_up = 68,
-	left_knee = 65,
-	left_pelvis = 64,
+	left_foot = 53,
+	left_foot_up = 52,
+	left_knee = 50,
+	left_pelvis = 49,
 	penis = 1,
-	right_pelvis = 73,
-	right_knee = 74,
-	right_foot_up = 85,
-	right_foot = 78,
+	right_pelvis = 55,
+	right_knee = 56,
+	right_foot_up = 58,
+	right_foot = 59,
 	up_penis = 2,
 	stomage = 3,
 	chest = 4,
-	neck = 61,
-	head = 62,
-	right_shoulder = 59,
-	right_elbow = 35,
-	right_hand = 36,
-	left_shoulder = 31,
+	neck = 5,
+	head = 48,
+	right_shoulder = 27,
+	right_elbow = 28,
+	right_hand = 29,
+	left_shoulder = 25,
 	left_elbow = 7,
-	left_hand = 25,
+	left_hand = 21,
 };
