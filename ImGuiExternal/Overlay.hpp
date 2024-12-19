@@ -3,6 +3,7 @@
 #include <ImGui/imgui.h>
 #include <ImGui/imgui_impl_dx9.h>
 #include <ImGui/imgui_impl_win32.h>
+#include <ImGui/imgui_internal.h>
 
 void inputHandler();
 LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -132,67 +133,134 @@ void DrawT(fvector2d pos, const char* text, float divide, ImColor color) {
 	ImGui::GetBackgroundDrawList()->AddText(ImVec2(pos.x - ImGui::CalcTextSize(text).x / 2, pos.y - (ImGui::CalcTextSize(text).y / divide)), color, text);
 }
 
-void DrawBones(DWORD64 sekeltalmesh, bool visible) {
-    if (!sekeltalmesh) {
-        throw std::runtime_error("Mesh is not valid.");
+void DrawBackgroundAnimation() {
+    static std::vector<ImVec2> particles;
+    static std::vector<float> particleAngles;
+    static std::vector<float> particleSpeeds;
+    static bool initialized = false;
+    static float spawnTimer = 0.0f;
+    const float SPAWN_INTERVAL = 0.5f;
+    
+    // Initialize particles if not done yet
+    if (!initialized) {
+        for (int i = 0; i < 50; i++) {
+            particles.push_back(ImVec2(
+                static_cast<float>(rand() % 1920),
+                static_cast<float>(rand() % 1080)
+            ));
+            particleAngles.push_back(static_cast<float>(rand()) / RAND_MAX * 2 * 3.14159f);
+            particleSpeeds.push_back(0.2f + static_cast<float>(rand()) / RAND_MAX * 0.3f);
+        }
+        initialized = true;
     }
 
-    ImColor color = visible == true ? ImColor(0, 255, 0) : ImColor(255, 0, 0);
+    // Spawn new particles over time
+    spawnTimer += ImGui::GetIO().DeltaTime;
+    if (spawnTimer >= SPAWN_INTERVAL && particles.size() < 150) {
+        particles.push_back(ImVec2(
+            static_cast<float>(rand() % 1920),
+            static_cast<float>(rand() % 1080)
+        ));
+        particleAngles.push_back(static_cast<float>(rand()) / RAND_MAX * 2 * 3.14159f);
+        particleSpeeds.push_back(0.2f + static_cast<float>(rand()) / RAND_MAX * 0.3f);
+        spawnTimer = 0.0f;
+    }
+
+    ImVec2 mousePos = ImGui::GetMousePos();
+    ImDrawList* draw_list = ImGui::GetBackgroundDrawList();
+    float deltaTime = ImGui::GetIO().DeltaTime;
+
+    // Update and draw each particle
+    for (size_t i = 0; i < particles.size(); i++) {
+        auto& particle = particles[i];
+        auto& angle = particleAngles[i];
+        auto& speed = particleSpeeds[i];
+
+        // Floating motion
+        particle.x += cos(angle) * speed;
+        particle.y += sin(angle) * speed;
+        
+        // Slowly rotate angle for smooth wave-like motion
+        angle += deltaTime * 0.3f;
+        
+        // Mouse interaction
+        float dx = particle.x - mousePos.x;
+        float dy = particle.y - mousePos.y;
+        float dist = sqrt(dx * dx + dy * dy);
+        
+        const float MAX_INFLUENCE_DIST = 150.0f;
+        const float MIN_INFLUENCE_DIST = 50.0f;
+        
+        if (dist < MAX_INFLUENCE_DIST) {
+            float movement_factor;
+            if (dist < MIN_INFLUENCE_DIST) {
+                movement_factor = 1.0f;
+            } else {
+                movement_factor = 1.0f - ((dist - MIN_INFLUENCE_DIST) / (MAX_INFLUENCE_DIST - MIN_INFLUENCE_DIST));
+            }
+            
+            particle.x += (dx / dist) * movement_factor * 3.0f;
+            particle.y += (dy / dist) * movement_factor * 3.0f;
+        }
+
+        // Screen wrapping
+        if (particle.x < 0) particle.x = 1920;
+        if (particle.x > 1920) particle.x = 0;
+        if (particle.y < 0) particle.y = 1080;
+        if (particle.y > 1080) particle.y = 0;
+
+        // Draw particle with pulsating opacity
+        float opacity = 0.4f + 0.2f * sin(ImGui::GetTime() * speed * 2.0f);
+        draw_list->AddCircleFilled(particle, 2.0f, ImColor(255, 255, 255, static_cast<int>(opacity * 255)));
+    }
+}
+
+void DrawBones(DWORD64 sekeltalmesh, bool visible, camera_position_s camera_postion) {
+    if (!sekeltalmesh) return;
+
+    static ImColor green(0, 255, 0);
+    static ImColor red(255, 0, 0);
+    ImColor color = visible ? green : red;
 
     try {
-        fvector2d head = w2s(get_bone_3d(sekeltalmesh, bone::head));
-        fvector2d neck = w2s(get_bone_3d(sekeltalmesh, bone::neck));
-        fvector2d chest = w2s(get_bone_3d(sekeltalmesh, bone::chest));
-        fvector2d stomach = w2s(get_bone_3d(sekeltalmesh, bone::stomage));
-        fvector2d up_penis = w2s(get_bone_3d(sekeltalmesh, bone::up_penis));
-        fvector2d penis = w2s(get_bone_3d(sekeltalmesh, bone::penis));
+        // Pre-allocate vector capacity
+        std::vector<fvector2d> bones;
+        bones.reserve(20);  // Reservar espacio exacto que necesitamos
 
-        fvector2d left_shoulder = w2s(get_bone_3d(sekeltalmesh, bone::left_shoulder));
-        fvector2d left_elbow = w2s(get_bone_3d(sekeltalmesh, bone::left_elbow));
-        fvector2d left_hand = w2s(get_bone_3d(sekeltalmesh, bone::left_hand));
+        // Cache bone positions in one go
+        fvector head_pos = get_bone_3d(sekeltalmesh, bone::head);
+        bones.push_back(w2s(head_pos));
+        
+        static const int bone_ids[] = {
+            bone::neck, bone::chest, bone::stomage, bone::up_penis, bone::penis,
+            bone::left_shoulder, bone::left_elbow, bone::left_hand,
+            bone::right_shoulder, bone::right_elbow, bone::right_hand,
+            bone::left_pelvis, bone::left_knee, bone::left_foot_up, bone::left_foot,
+            bone::right_pelvis, bone::right_knee, bone::right_foot_up, bone::right_foot
+        };
 
-        fvector2d right_shoulder = w2s(get_bone_3d(sekeltalmesh, bone::right_shoulder));
-        fvector2d right_elbow = w2s(get_bone_3d(sekeltalmesh, bone::right_elbow));
-        fvector2d right_hand = w2s(get_bone_3d(sekeltalmesh, bone::right_hand));
+        // Usar array estático en lugar de vector para connections
+        for (int id : bone_ids) {
+            bones.push_back(w2s(get_bone_3d(sekeltalmesh, id)));
+        }
 
-        fvector2d left_pelvis = w2s(get_bone_3d(sekeltalmesh, bone::left_pelvis));
-        fvector2d left_knee = w2s(get_bone_3d(sekeltalmesh, bone::left_knee));
-        fvector2d left_foot_up = w2s(get_bone_3d(sekeltalmesh, bone::left_foot_up));
-        fvector2d left_foot = w2s(get_bone_3d(sekeltalmesh, bone::left_foot));
+        // Draw head circle - calcular radio una sola vez
+        float radius = std::clamp(static_cast<float>(15.0f / (camera_postion.location.distance(head_pos) * 0.002f)), 3.0f, 15.0f);
+        DrawCircle(bones[0], radius, 0, color);
 
-        fvector2d right_pelvis = w2s(get_bone_3d(sekeltalmesh, bone::right_pelvis));
-        fvector2d right_knee = w2s(get_bone_3d(sekeltalmesh, bone::right_knee));
-        fvector2d right_foot_up = w2s(get_bone_3d(sekeltalmesh, bone::right_foot_up));
-        fvector2d right_foot = w2s(get_bone_3d(sekeltalmesh, bone::right_foot));
+        // Connections como array estático
+        static const std::pair<int, int> connections[] = {
+            {0,1}, {1,2}, {2,3}, {3,4}, {4,5},  // Spine
+            {1,6}, {6,7}, {7,8},   // Left arm
+            {1,9}, {9,10}, {10,11}, // Right arm
+            {5,12}, {12,13}, {13,14}, {14,15},  // Left leg
+            {5,16}, {16,17}, {17,18}, {18,19}   // Right leg
+        };
 
-
-        float radio = (neck.y - head.y) * 1.8f;
-        DrawCircle(head, radio, 0, color);
-        DrawLine(head, neck, color, 0, true);
-        DrawLine(neck, chest, color, 0, true);
-        DrawLine(chest, stomach, color, 0, true);
-        DrawLine(stomach, up_penis, color, 0, true);
-        DrawLine(up_penis, penis, color, 0, true);
-
-        DrawLine(neck, left_shoulder, color, 0, true);
-        DrawLine(left_shoulder, left_elbow, color, 0, true);
-        DrawLine(left_elbow, left_hand, color, 0, true);
-
-        DrawLine(neck, right_shoulder, color, 0, true);
-        DrawLine(right_shoulder, right_elbow, color, 0, true);
-        DrawLine(right_elbow, right_hand, color, 0, true);
-
-        DrawLine(penis, left_pelvis, color, 0, true);
-        DrawLine(left_pelvis, left_knee, color, 0, true);
-        DrawLine(left_knee, left_foot_up, color, 0, true);
-        DrawLine(left_foot_up, left_foot, color, 0, true);
-
-        DrawLine(penis, right_pelvis, color, 0, true);
-        DrawLine(right_pelvis, right_knee, color, 0, true);
-        DrawLine(right_knee, right_foot_up, color, 0, true);
-        DrawLine(right_foot_up, right_foot, color, 0, true);
+        // Draw all lines
+        for (const auto& [first, second] : connections) {
+            DrawLine(bones[first], bones[second], color, 0, true);
+        }
     }
-    catch (const std::exception& e) {
-        std::cerr << "Error al dibujar los huesos: " << e.what() << std::endl;
-    }
+    catch (...) { } // Manejo de errores simplificado para mejor rendimiento
 }

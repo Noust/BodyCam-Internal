@@ -1,8 +1,6 @@
 #include "include.h"
-
 bool esp = false;
 bool team = false;
-static bool showHealth = true;
 
 bool isInitialized = false;
 bool isMenuVisible = true;
@@ -10,6 +8,8 @@ char cdistance[25];
 char chealth[25];
 float distancelimit = 50;
 int numPlayers;
+
+std::unordered_map<DWORD64, bool> playerHealthStates;
 
 void Colors() {
 	ImGuiStyle& style = ImGui::GetStyle();
@@ -79,6 +79,8 @@ void Colors() {
 
 }
 
+
+
 struct WindowInfo {
 	int Width;
 	int Height;
@@ -131,6 +133,7 @@ void renderImGui() {
 	SetWindowLong(overlayWindow, GWL_EXSTYLE, isMenuVisible ? WS_EX_TOOLWINDOW : (WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW));
 	UpdateWindow(overlayWindow);
 	if (isMenuVisible) {
+		DrawBackgroundAnimation();
 		inputHandler();
 		drawItem();
 
@@ -200,7 +203,9 @@ void renderImGui() {
 					double health;
 					if (!read<double>(survivorStatus + 0x00B0, health)) continue;
 
-					if (health <= 0) {
+					auto& showHealth = playerHealthStates[currentPlayerActor];
+					
+					if (health <= 1) {
 						showHealth = false;
 					} else if (health >= 100) {
 						showHealth = true;
@@ -231,7 +236,7 @@ void renderImGui() {
 					sprintf_s(chealth, sizeof(chealth), "HP:%0.f", health);
 
 					if (root.x > 0 && root.y > 0 && root.x < 1920 && root.y < 1080) {
-						DrawBones(skeletalMesh, is_visible(skeletalMesh));
+						DrawBones(skeletalMesh, is_visible(skeletalMesh), camera_postion);
 						DrawT(root, cdistance, 4, ImColor(255, 0, 0));
 						DrawT(root, chealth, 1, ImColor(255, 0, 0));
 					}
