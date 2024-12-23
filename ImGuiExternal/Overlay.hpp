@@ -143,7 +143,7 @@ void DrawBackgroundAnimation() {
     
     // Initialize particles if not done yet
     if (!initialized) {
-        for (int i = 0; i < 50; i++) {
+        for (int i = 0; i < 100; i++) {
             particles.push_back(ImVec2(
                 static_cast<float>(rand() % 1920),
                 static_cast<float>(rand() % 1080)

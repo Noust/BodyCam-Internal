@@ -11,6 +11,14 @@ int numPlayers;
 
 std::unordered_map<DWORD64, bool> playerHealthStates;
 
+std::string WideToString(const wchar_t* wide) {
+    if (!wide) return "";
+    int size = WideCharToMultiByte(CP_UTF8, 0, wide, -1, nullptr, 0, nullptr, nullptr);
+    std::string str(size - 1, 0);
+    WideCharToMultiByte(CP_UTF8, 0, wide, -1, &str[0], size, nullptr, nullptr);
+    return str;
+}
+
 void Colors() {
 	ImGuiStyle& style = ImGui::GetStyle();
 	style.WindowPadding = ImVec2(11, 12);
@@ -136,7 +144,7 @@ void renderImGui() {
 		DrawBackgroundAnimation();
 		inputHandler();
 		drawItem();
-
+		
 		ImGui::Begin("NOVA", 0, ImGuiWindowFlags_NoCollapse);
 		
 		ImVec2 windowSize = ImGui::GetContentRegionAvail();
@@ -194,9 +202,6 @@ void renderImGui() {
 
 					if (!adresses.acknowledged_pawn || currentPlayerActor == adresses.acknowledged_pawn) continue;
 
-					//name = reinterpret_cast<Name*>(playerState);
-					//if (!name) continue;
-
 					DWORD64 survivorStatus;
 					if (!read<DWORD64>(currentPlayerActor + 0x0638, survivorStatus)) continue;
 
@@ -213,8 +218,9 @@ void renderImGui() {
 
 					if (!showHealth) continue;
 
-					int teamIndex;
-					if (!read<int>(currentPlayerActor + 0xFA0, teamIndex) && team) continue;
+					int teamIndex = 0;
+					if (team)
+						if (!read<int>(currentPlayerActor + 0xFA0, teamIndex)) continue;
 
 					if (team && teamIndex == ackteamid) continue;
 
@@ -222,8 +228,11 @@ void renderImGui() {
 
 					if (!skeletalMesh) continue;
 					fvector base = get_bone_3d(skeletalMesh, bone::Root);
+					fvector top = get_bone_3d(skeletalMesh, bone::Root);
+					top.z += 180;
 					if (base.x == 0 && base.y == 0 && base.z == 0) continue;
 					fvector2d root = w2s(base);
+					fvector2d head = w2s(top);
 
 					float distance = camera_postion.location.distance(base) / 100;
 
@@ -235,10 +244,14 @@ void renderImGui() {
 					sprintf_s(cdistance, sizeof(cdistance), "[%0.fm]", distance);
 					sprintf_s(chealth, sizeof(chealth), "HP:%0.f", health);
 
+					name = (Name*)(playerState);
+					if (!name) continue;
+
 					if (root.x > 0 && root.y > 0 && root.x < 1920 && root.y < 1080) {
 						DrawBones(skeletalMesh, is_visible(skeletalMesh), camera_postion);
 						DrawT(root, cdistance, 4, ImColor(255, 0, 0));
 						DrawT(root, chealth, 1, ImColor(255, 0, 0));
+						DrawT(head, WideToString(name->ptr1->Name).c_str(), 1, ImColor(255, 0, 0));
 					}
 				}
 			}
