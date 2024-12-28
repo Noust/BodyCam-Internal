@@ -12,11 +12,11 @@ int numPlayers;
 std::unordered_map<DWORD64, bool> playerHealthStates;
 
 std::string WideToString(const wchar_t* wide) {
-    if (!wide) return "";
-    int size = WideCharToMultiByte(CP_UTF8, 0, wide, -1, nullptr, 0, nullptr, nullptr);
-    std::string str(size - 1, 0);
-    WideCharToMultiByte(CP_UTF8, 0, wide, -1, &str[0], size, nullptr, nullptr);
-    return str;
+	if (!wide) return "";
+	int size = WideCharToMultiByte(CP_UTF8, 0, wide, -1, nullptr, 0, nullptr, nullptr);
+	std::string str(size - 1, 0);
+	WideCharToMultiByte(CP_UTF8, 0, wide, -1, &str[0], size, nullptr, nullptr);
+	return str;
 }
 
 void Colors() {
@@ -144,18 +144,18 @@ void renderImGui() {
 		DrawBackgroundAnimation();
 		inputHandler();
 		drawItem();
-		
+
 		ImGui::Begin("NOVA", 0, ImGuiWindowFlags_NoCollapse);
-		
+
 		ImVec2 windowSize = ImGui::GetContentRegionAvail();
-		
+
 		if (ImGui::BeginTabBar("MainTabs")) {
 			if (ImGui::BeginTabItem("Visuals")) {
 				ImGui::BeginChild("VisualsChild", ImVec2(windowSize.x - 16, windowSize.y - 40), true);
-				
+
 				ImGui::Text("ESP Options");
 				ImGui::Separator();
-				
+
 				ImGui::Checkbox("Enable ESP", &esp);
 				if (esp) {
 					ImGui::Indent(20);
@@ -163,22 +163,22 @@ void renderImGui() {
 					ImGui::SliderFloat("Max Distance", &distancelimit, 10, 100, "%.0f m");
 					ImGui::Unindent(20);
 				}
-				
+
 				ImGui::EndChild();
 				ImGui::EndTabItem();
 			}
-			
+
 			if (ImGui::BeginTabItem("Settings")) {
 				ImGui::BeginChild("SettingsChild", ImVec2(windowSize.x - 16, windowSize.y - 40), true);
-				
+
 				ImGui::Text("Debug Info");
 				ImGui::Separator();
 				ImGui::Text("Players Found: %d", numPlayers);
-				
+
 				ImGui::EndChild();
 				ImGui::EndTabItem();
 			}
-			
+
 			ImGui::EndTabBar();
 		}
 
@@ -209,10 +209,11 @@ void renderImGui() {
 					if (!read<double>(survivorStatus + 0x00B0, health)) continue;
 
 					auto& showHealth = playerHealthStates[currentPlayerActor];
-					
+
 					if (health <= 1) {
 						showHealth = false;
-					} else if (health >= 100) {
+					}
+					else if (health >= 100) {
 						showHealth = true;
 					}
 
@@ -231,27 +232,37 @@ void renderImGui() {
 					fvector top = get_bone_3d(skeletalMesh, bone::Root);
 					top.z += 180;
 					if (base.x == 0 && base.y == 0 && base.z == 0) continue;
+					if (top.x == 0 && top.y == 0 && top.z == 0) continue;
 					fvector2d root = w2s(base);
 					fvector2d head = w2s(top);
 
 					float distance = camera_postion.location.distance(base) / 100;
 
-					there = true;
-
 					if (distance > distancelimit)
 						continue;
-
-					sprintf_s(cdistance, sizeof(cdistance), "[%0.fm]", distance);
-					sprintf_s(chealth, sizeof(chealth), "HP:%0.f", health);
 
 					name = (Name*)(playerState);
 					if (!name) continue;
 
-					if (root.x > 0 && root.y > 0 && root.x < 1920 && root.y < 1080) {
+					if (root.x > 0 && root.y > 0 && root.x < widthscreen && root.y < heightscreen) {
+						float textSpacing = 15.0f;
+						fvector2d namePos = head;
+						namePos.y -= (textSpacing - 5);
+
+						fvector2d healthPos = root;
+						healthPos.y += textSpacing;
+
+						fvector2d distancePos = healthPos;
+						distancePos.y += textSpacing;
+
+						sprintf_s(cdistance, sizeof(cdistance), "[%0.fm]", distance);
+						sprintf_s(chealth, sizeof(chealth), "HP:%0.f", health);
+
+						DrawT(namePos, WideToString(name->ptr1->Name).c_str(), 1, ImColor(255, 0, 0));
+						DrawT(healthPos, chealth, 1, ImColor(255, 0, 0));
+						DrawT(distancePos, cdistance, 1, ImColor(255, 0, 0));
+
 						DrawBones(skeletalMesh, is_visible(skeletalMesh), camera_postion);
-						DrawT(root, cdistance, 4, ImColor(255, 0, 0));
-						DrawT(root, chealth, 1, ImColor(255, 0, 0));
-						DrawT(head, WideToString(name->ptr1->Name).c_str(), 1, ImColor(255, 0, 0));
 					}
 				}
 			}
@@ -262,7 +273,9 @@ void renderImGui() {
 	pDevice->Clear(0, NULL, D3DCLEAR_TARGET, D3DCOLOR_ARGB(0, 0, 0, 0), 1.0f, 0);
 	if (pDevice->BeginScene() >= 0) {
 		ImGui::Render();
-		ImGui_ImplDX9_RenderDrawData(ImGui::GetDrawData());
+		if (ImGui::GetDrawData()) {
+			ImGui_ImplDX9_RenderDrawData(ImGui::GetDrawData());
+		}
 		pDevice->EndScene();
 	}
 
@@ -332,7 +345,7 @@ void inputHandler() {
 	}
 }
 
-bool createOverlay() {	
+bool createOverlay() {
 	windowClass = { sizeof(WNDCLASSEX), NULL, WndProc, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ovarlayName.c_str(), NULL };
 	RegisterClassEx(&windowClass);
 

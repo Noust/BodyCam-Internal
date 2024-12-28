@@ -20,7 +20,6 @@ float widthscreen;
 float heightscreen;
 
 DWORD64 Uworld = NULL;
-bool there = false;
 
 #include "HookFunc.h"
 #include "hooks.h"

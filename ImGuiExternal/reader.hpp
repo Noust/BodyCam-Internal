@@ -15,7 +15,7 @@ public:
         if (!IsValidType()) {
             return false;
         }
-        
+
         if (address == 0 || address == UINTPTR_MAX) {
             return false;
         }
@@ -23,7 +23,7 @@ public:
         __try {
             // Verifica que la memoria sea legible
             const T* ptr = reinterpret_cast<const T*>(address);
-            
+
             // Verifica alineación de memoria
             if (reinterpret_cast<uintptr_t>(ptr) % alignof(T) != 0) {
                 return false;
@@ -183,14 +183,14 @@ inline bool WriteByteSafe(uintptr_t address, const std::vector<uint8_t>& bytes) 
 }
 
 struct world {
-	uintptr_t uworld;
-	DWORD64 game_instance;
-	DWORD64 local_player;
+    uintptr_t uworld;
+    DWORD64 game_instance;
+    DWORD64 local_player;
     DWORD64 player_controller;
-	DWORD64 acknowledged_pawn;
-	DWORD64 player_state;
-	DWORD64 game_state;
-	DWORD64 player_array;
+    DWORD64 acknowledged_pawn;
+    DWORD64 player_state;
+    DWORD64 game_state;
+    DWORD64 player_array;
 };
 world adresses;
 
@@ -213,7 +213,7 @@ bool ReadValues() {
 
     if (!ReadLocalPlayer())
         return false;
-        
+
     if (!ReadPlayerController())
         return false;
 

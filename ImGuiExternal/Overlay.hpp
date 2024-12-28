@@ -42,58 +42,58 @@ DWORD getProcessID(std::string processName) {
 
 typedef struct
 {
-	DWORD R;
-	DWORD G;
-	DWORD B;
-	DWORD A;
+    DWORD R;
+    DWORD G;
+    DWORD B;
+    DWORD A;
 }RGBA;
 
 std::string stringToUTF8(const std::string& str) {
-	int nwLen = ::MultiByteToWideChar(CP_ACP, 0, str.c_str(), -1, NULL, 0);
-	wchar_t* pwBuf = new wchar_t[nwLen + 1];
-	ZeroMemory(pwBuf, nwLen * 2 + 2);
-	::MultiByteToWideChar(CP_ACP, 0, str.c_str(), str.length(), pwBuf, nwLen);
-	int nLen = ::WideCharToMultiByte(CP_UTF8, 0, pwBuf, -1, NULL, NULL, NULL, NULL);
-	char* pBuf = new char[nLen + 1];
-	ZeroMemory(pBuf, nLen + 1);
-	::WideCharToMultiByte(CP_UTF8, 0, pwBuf, nwLen, pBuf, nLen, NULL, NULL);
-	std::string retStr(pBuf);
-	delete[]pwBuf;
-	delete[]pBuf;
-	pwBuf = NULL;
-	pBuf = NULL;
-	return retStr;
+    int nwLen = ::MultiByteToWideChar(CP_ACP, 0, str.c_str(), -1, NULL, 0);
+    wchar_t* pwBuf = new wchar_t[nwLen + 1];
+    ZeroMemory(pwBuf, nwLen * 2 + 2);
+    ::MultiByteToWideChar(CP_ACP, 0, str.c_str(), str.length(), pwBuf, nwLen);
+    int nLen = ::WideCharToMultiByte(CP_UTF8, 0, pwBuf, -1, NULL, NULL, NULL, NULL);
+    char* pBuf = new char[nLen + 1];
+    ZeroMemory(pBuf, nLen + 1);
+    ::WideCharToMultiByte(CP_UTF8, 0, pwBuf, nwLen, pBuf, nLen, NULL, NULL);
+    std::string retStr(pBuf);
+    delete[]pwBuf;
+    delete[]pBuf;
+    pwBuf = NULL;
+    pBuf = NULL;
+    return retStr;
 }
 
 void drawStrokeText(int x, int y, RGBA* color, const char* str) {
-	ImFont a;
-	std::string utf_8_1 = std::string(str);
-	std::string utf_8_2 = stringToUTF8(utf_8_1);
-	ImGui::GetForegroundDrawList()->AddText(ImVec2(x, y - 1), ImGui::ColorConvertFloat4ToU32(ImVec4(1 / 255.0, 1 / 255.0, 1 / 255.0, 255 / 255.0)), utf_8_2.c_str());
-	ImGui::GetForegroundDrawList()->AddText(ImVec2(x, y + 1), ImGui::ColorConvertFloat4ToU32(ImVec4(1 / 255.0, 1 / 255.0, 1 / 255.0, 255 / 255.0)), utf_8_2.c_str());
-	ImGui::GetForegroundDrawList()->AddText(ImVec2(x - 1, y), ImGui::ColorConvertFloat4ToU32(ImVec4(1 / 255.0, 1 / 255.0, 1 / 255.0, 255 / 255.0)), utf_8_2.c_str());
-	ImGui::GetForegroundDrawList()->AddText(ImVec2(x + 1, y), ImGui::ColorConvertFloat4ToU32(ImVec4(1 / 255.0, 1 / 255.0, 1 / 255.0, 255 / 255.0)), utf_8_2.c_str());
-	ImGui::GetForegroundDrawList()->AddText(ImVec2(x, y), ImGui::ColorConvertFloat4ToU32(ImVec4(color->R / 255.0, color->G / 255.0, color->B / 255.0, color->A / 255.0)), utf_8_2.c_str());
+    ImFont a;
+    std::string utf_8_1 = std::string(str);
+    std::string utf_8_2 = stringToUTF8(utf_8_1);
+    ImGui::GetForegroundDrawList()->AddText(ImVec2(x, y - 1), ImGui::ColorConvertFloat4ToU32(ImVec4(1 / 255.0, 1 / 255.0, 1 / 255.0, 255 / 255.0)), utf_8_2.c_str());
+    ImGui::GetForegroundDrawList()->AddText(ImVec2(x, y + 1), ImGui::ColorConvertFloat4ToU32(ImVec4(1 / 255.0, 1 / 255.0, 1 / 255.0, 255 / 255.0)), utf_8_2.c_str());
+    ImGui::GetForegroundDrawList()->AddText(ImVec2(x - 1, y), ImGui::ColorConvertFloat4ToU32(ImVec4(1 / 255.0, 1 / 255.0, 1 / 255.0, 255 / 255.0)), utf_8_2.c_str());
+    ImGui::GetForegroundDrawList()->AddText(ImVec2(x + 1, y), ImGui::ColorConvertFloat4ToU32(ImVec4(1 / 255.0, 1 / 255.0, 1 / 255.0, 255 / 255.0)), utf_8_2.c_str());
+    ImGui::GetForegroundDrawList()->AddText(ImVec2(x, y), ImGui::ColorConvertFloat4ToU32(ImVec4(color->R / 255.0, color->G / 255.0, color->B / 255.0, color->A / 255.0)), utf_8_2.c_str());
 }
 
 void DrawLine(fvector2d pos1, fvector2d pos2, ImColor color, float Thicknes, bool checkpoints) {
-	if (checkpoints) {
-		if (pos1.x >= 0 && pos1.y >= 0 && pos1.x <= widthscreen && pos1.y <= heightscreen && pos2.x >= 0 && pos2.y >= 0 && pos2.x <= widthscreen && pos2.y <= heightscreen) {
-			ImGui::GetBackgroundDrawList()->AddLine(ImVec2(pos1.x, pos1.y), ImVec2(pos2.x, pos2.y), ImColor(0, 0, 0), Thicknes + 2);
-			ImGui::GetBackgroundDrawList()->AddLine(ImVec2(pos1.x, pos1.y), ImVec2(pos2.x, pos2.y), color, Thicknes);
-		}
-	}
-	else {
-		ImGui::GetBackgroundDrawList()->AddLine(ImVec2(pos1.x, pos1.y), ImVec2(pos2.x, pos2.y), ImColor(0, 0, 0), Thicknes + 2);
-		ImGui::GetBackgroundDrawList()->AddLine(ImVec2(pos1.x, pos1.y), ImVec2(pos2.x, pos2.y), color, Thicknes);
-	}
+    if (checkpoints) {
+        if (pos1.x >= 0 && pos1.y >= 0 && pos1.x <= widthscreen && pos1.y <= heightscreen && pos2.x >= 0 && pos2.y >= 0 && pos2.x <= widthscreen && pos2.y <= heightscreen) {
+            ImGui::GetBackgroundDrawList()->AddLine(ImVec2(pos1.x, pos1.y), ImVec2(pos2.x, pos2.y), ImColor(0, 0, 0), Thicknes + 2);
+            ImGui::GetBackgroundDrawList()->AddLine(ImVec2(pos1.x, pos1.y), ImVec2(pos2.x, pos2.y), color, Thicknes);
+        }
+    }
+    else {
+        ImGui::GetBackgroundDrawList()->AddLine(ImVec2(pos1.x, pos1.y), ImVec2(pos2.x, pos2.y), ImColor(0, 0, 0), Thicknes + 2);
+        ImGui::GetBackgroundDrawList()->AddLine(ImVec2(pos1.x, pos1.y), ImVec2(pos2.x, pos2.y), color, Thicknes);
+    }
 }
 
 void drawNewText(int x, int y, RGBA* color, const char* str) {
-	ImFont a;
-	std::string utf_8_1 = std::string(str);
-	std::string utf_8_2 = stringToUTF8(utf_8_1);
-	ImGui::GetForegroundDrawList()->AddText(ImVec2(x, y), ImGui::ColorConvertFloat4ToU32(ImVec4(color->R / 255.0, color->G / 255.0, color->B / 255.0, color->A / 255.0)), utf_8_2.c_str());
+    ImFont a;
+    std::string utf_8_1 = std::string(str);
+    std::string utf_8_2 = stringToUTF8(utf_8_1);
+    ImGui::GetForegroundDrawList()->AddText(ImVec2(x, y), ImGui::ColorConvertFloat4ToU32(ImVec4(color->R / 255.0, color->G / 255.0, color->B / 255.0, color->A / 255.0)), utf_8_2.c_str());
 }
 
 void DrawCircle(fvector2d pos, int radious, int thickness, ImColor color) {
@@ -104,33 +104,33 @@ void DrawCircle(fvector2d pos, int radious, int thickness, ImColor color) {
 }
 
 void DrawCornerEsp(float W, float H, Vector2 pos, ImColor color, int thickness) {
-	float lineW = (W / 5);
-	float lineH = (H / 6);
+    float lineW = (W / 5);
+    float lineH = (H / 6);
 
-	//outline
-	DrawLine({ pos.x - W / 2, pos.y - H }, { pos.x - W / 2 + lineW, pos.y - H }, color, thickness, false);//top left
-	DrawLine({ pos.x - W / 2, pos.y - H }, { pos.x - W / 2, pos.y - H + lineH }, color, thickness, false);
-	DrawLine({ pos.x - W / 2, pos.y - lineH }, { pos.x - W / 2, pos.y }, color, thickness, false); //bot left
-	DrawLine({ pos.x - W / 2, pos.y }, { pos.x - W / 2 + lineW, pos.y }, color, thickness, false);
-	DrawLine({ pos.x + W / 2 - lineW, pos.y - H }, { pos.x + W / 2, pos.y - H }, color, thickness, false); // top right
-	DrawLine({ pos.x + W / 2, pos.y - H }, { pos.x + W / 2, pos.y - H + lineH }, color, thickness, false);
-	DrawLine({ pos.x + W / 2, pos.y - lineH }, { pos.x + W / 2, pos.y }, color, thickness, false); // bot right
-	DrawLine({ pos.x + W / 2 - lineW, pos.y }, { pos.x + W / 2, pos.y }, color, thickness, false);
+    //outline
+    DrawLine({ pos.x - W / 2, pos.y - H }, { pos.x - W / 2 + lineW, pos.y - H }, color, thickness, false);//top left
+    DrawLine({ pos.x - W / 2, pos.y - H }, { pos.x - W / 2, pos.y - H + lineH }, color, thickness, false);
+    DrawLine({ pos.x - W / 2, pos.y - lineH }, { pos.x - W / 2, pos.y }, color, thickness, false); //bot left
+    DrawLine({ pos.x - W / 2, pos.y }, { pos.x - W / 2 + lineW, pos.y }, color, thickness, false);
+    DrawLine({ pos.x + W / 2 - lineW, pos.y - H }, { pos.x + W / 2, pos.y - H }, color, thickness, false); // top right
+    DrawLine({ pos.x + W / 2, pos.y - H }, { pos.x + W / 2, pos.y - H + lineH }, color, thickness, false);
+    DrawLine({ pos.x + W / 2, pos.y - lineH }, { pos.x + W / 2, pos.y }, color, thickness, false); // bot right
+    DrawLine({ pos.x + W / 2 - lineW, pos.y }, { pos.x + W / 2, pos.y }, color, thickness, false);
 }
 
 void DrawFilledRect(Vector2 pos, float height, float width, ImColor color) {
-	ImGui::GetBackgroundDrawList()->AddRectFilled({ pos.x - width,pos.y - height }, { pos.x + width, pos.y }, color);
+    ImGui::GetBackgroundDrawList()->AddRectFilled({ pos.x - width,pos.y - height }, { pos.x + width, pos.y }, color);
 }
 
 void drawbox(fvector2d pos, float height, float width, ImColor color, float thickness) {
-	DrawLine({ pos.x + width, pos.y }, { pos.x - width,pos.y }, color, thickness, false);
-	DrawLine({ pos.x + width, pos.y }, { pos.x + width,pos.y - height }, color, thickness, false);
-	DrawLine({ pos.x + width,pos.y - height }, { pos.x - width,pos.y - height }, color, thickness, false);
-	DrawLine({ pos.x - width,pos.y - height }, { pos.x - width,pos.y }, color, thickness, false);
+    DrawLine({ pos.x + width, pos.y }, { pos.x - width,pos.y }, color, thickness, false);
+    DrawLine({ pos.x + width, pos.y }, { pos.x + width,pos.y - height }, color, thickness, false);
+    DrawLine({ pos.x + width,pos.y - height }, { pos.x - width,pos.y - height }, color, thickness, false);
+    DrawLine({ pos.x - width,pos.y - height }, { pos.x - width,pos.y }, color, thickness, false);
 }
 
 void DrawT(fvector2d pos, const char* text, float divide, ImColor color) {
-	ImGui::GetBackgroundDrawList()->AddText(ImVec2(pos.x - ImGui::CalcTextSize(text).x / 2, pos.y - (ImGui::CalcTextSize(text).y / divide)), color, text);
+    ImGui::GetBackgroundDrawList()->AddText(ImVec2(pos.x - ImGui::CalcTextSize(text).x / 2, pos.y - (ImGui::CalcTextSize(text).y / divide)), color, text);
 }
 
 void DrawBackgroundAnimation() {
@@ -140,13 +140,13 @@ void DrawBackgroundAnimation() {
     static bool initialized = false;
     static float spawnTimer = 0.0f;
     const float SPAWN_INTERVAL = 0.5f;
-    
+
     // Initialize particles if not done yet
     if (!initialized) {
         for (int i = 0; i < 100; i++) {
             particles.push_back(ImVec2(
-                static_cast<float>(rand() % 1920),
-                static_cast<float>(rand() % 1080)
+                static_cast<float>(rand() % static_cast<int>(widthscreen)),
+                static_cast<float>(rand() % static_cast<int>(heightscreen))
             ));
             particleAngles.push_back(static_cast<float>(rand()) / RAND_MAX * 2 * 3.14159f);
             particleSpeeds.push_back(0.2f + static_cast<float>(rand()) / RAND_MAX * 0.3f);
@@ -158,8 +158,8 @@ void DrawBackgroundAnimation() {
     spawnTimer += ImGui::GetIO().DeltaTime;
     if (spawnTimer >= SPAWN_INTERVAL && particles.size() < 150) {
         particles.push_back(ImVec2(
-            static_cast<float>(rand() % 1920),
-            static_cast<float>(rand() % 1080)
+            static_cast<float>(rand() % static_cast<int>(widthscreen)),
+            static_cast<float>(rand() % static_cast<int>(heightscreen))
         ));
         particleAngles.push_back(static_cast<float>(rand()) / RAND_MAX * 2 * 3.14159f);
         particleSpeeds.push_back(0.2f + static_cast<float>(rand()) / RAND_MAX * 0.3f);
@@ -179,35 +179,36 @@ void DrawBackgroundAnimation() {
         // Floating motion
         particle.x += cos(angle) * speed;
         particle.y += sin(angle) * speed;
-        
+
         // Slowly rotate angle for smooth wave-like motion
         angle += deltaTime * 0.3f;
-        
+
         // Mouse interaction
         float dx = particle.x - mousePos.x;
         float dy = particle.y - mousePos.y;
         float dist = sqrt(dx * dx + dy * dy);
-        
+
         const float MAX_INFLUENCE_DIST = 150.0f;
         const float MIN_INFLUENCE_DIST = 50.0f;
-        
+
         if (dist < MAX_INFLUENCE_DIST) {
             float movement_factor;
             if (dist < MIN_INFLUENCE_DIST) {
                 movement_factor = 1.0f;
-            } else {
+            }
+            else {
                 movement_factor = 1.0f - ((dist - MIN_INFLUENCE_DIST) / (MAX_INFLUENCE_DIST - MIN_INFLUENCE_DIST));
             }
-            
+
             particle.x += (dx / dist) * movement_factor * 3.0f;
             particle.y += (dy / dist) * movement_factor * 3.0f;
         }
 
         // Screen wrapping
-        if (particle.x < 0) particle.x = 1920;
-        if (particle.x > 1920) particle.x = 0;
-        if (particle.y < 0) particle.y = 1080;
-        if (particle.y > 1080) particle.y = 0;
+        if (particle.x < 0) particle.x = widthscreen;
+        if (particle.x > widthscreen) particle.x = 0;
+        if (particle.y < 0) particle.y = heightscreen;
+        if (particle.y > heightscreen) particle.y = 0;
 
         // Draw particle with pulsating opacity
         float opacity = 0.4f + 0.2f * sin(ImGui::GetTime() * speed * 2.0f);
@@ -230,7 +231,7 @@ void DrawBones(DWORD64 sekeltalmesh, bool visible, camera_position_s camera_post
         // Cache bone positions in one go
         fvector head_pos = get_bone_3d(sekeltalmesh, bone::head);
         bones.push_back(w2s(head_pos));
-        
+
         static const int bone_ids[] = {
             bone::neck, bone::chest, bone::stomage, bone::up_penis, bone::penis,
             bone::left_shoulder, bone::left_elbow, bone::left_hand,
@@ -262,5 +263,5 @@ void DrawBones(DWORD64 sekeltalmesh, bool visible, camera_position_s camera_post
             DrawLine(bones[first], bones[second], color, 0, true);
         }
     }
-    catch (...) { } // Manejo de errores simplificado para mejor rendimiento
+    catch (...) {} // Manejo de errores simplificado para mejor rendimiento
 }

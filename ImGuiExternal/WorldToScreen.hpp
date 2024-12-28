@@ -18,8 +18,8 @@ fvector get_bone_3d(uintptr_t skeletal_mesh, int bone_index)
 {
 	DWORD64 bonearray;
 	DWORD64 bonearray2;
-	
-	if (!read<DWORD64>(skeletal_mesh + 0x610, bonearray) || 
+
+	if (!read<DWORD64>(skeletal_mesh + 0x610, bonearray) ||
 		!read<DWORD64>(skeletal_mesh + 0x620, bonearray2)) {
 		return fvector(0, 0, 0);
 	}
@@ -42,14 +42,14 @@ fvector get_bone_3d(uintptr_t skeletal_mesh, int bone_index)
 }
 
 camera_position_s get_camera() {
-	if (!adresses.uworld || !offset::game_instance || !offset::local_player || 
+	if (!adresses.uworld || !offset::game_instance || !offset::local_player ||
 		!offset::player_controller || !adresses.player_controller) {
 		return {};
 	}
 
 	DWORD64 location_pointer;
 	DWORD64 rotation_pointer;
-	
+
 	if (!read<DWORD64>(adresses.uworld + 0x110, location_pointer) ||
 		!read<DWORD64>(adresses.uworld + 0x120, rotation_pointer)) {
 		return {};
@@ -73,12 +73,12 @@ camera_position_s get_camera() {
 bool is_visible(uintptr_t skeletal_mesh) {
 	float last_submit;
 	float last_render;
-	
+
 	if (!read<float>(skeletal_mesh + 0x358, last_submit) ||
 		!read<float>(skeletal_mesh + 0x360, last_render)) {
 		return false;
 	}
-	
+
 	return (bool)(last_render + 0.06f >= last_submit);
 }
 
