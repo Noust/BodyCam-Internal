@@ -87,8 +87,6 @@ void Colors() {
 
 }
 
-
-
 struct WindowInfo {
 	int Width;
 	int Height;

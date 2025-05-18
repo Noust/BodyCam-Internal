@@ -9,6 +9,34 @@ private:
         return std::is_trivially_copyable<T>::value;
     }
 
+    static bool IsAddressValid(uintptr_t address, size_t size) {
+        // Verificar rango de direcciones válido
+        if (address == 0 || address == UINTPTR_MAX || 
+            address + size < address || // Overflow check
+            address + size > UINTPTR_MAX) {
+            return false;
+        }
+
+        // Verificar que el rango completo está en la misma página de memoria
+        MEMORY_BASIC_INFORMATION mbi;
+        if (!VirtualQuery(reinterpret_cast<LPCVOID>(address), &mbi, sizeof(mbi))) {
+            return false;
+        }
+
+        // Verificar que todo el rango está dentro de la región
+        if (address + size > (uintptr_t)mbi.BaseAddress + mbi.RegionSize) {
+            return false;
+        }
+
+        // Verificar permisos de memoria
+        if (!(mbi.State == MEM_COMMIT &&
+            mbi.Protect & (PAGE_READONLY | PAGE_READWRITE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE))) {
+            return false;
+        }
+
+        return true;
+    }
+
 public:
     static bool ReadMemory(uintptr_t address, T& output) {
         // Verificaciones iniciales
@@ -16,35 +44,24 @@ public:
             return false;
         }
 
-        if (address == 0 || address == UINTPTR_MAX) {
+        if (!IsAddressValid(address, sizeof(T))) {
             return false;
         }
 
         __try {
-            // Verifica que la memoria sea legible
             const T* ptr = reinterpret_cast<const T*>(address);
 
-            // Verifica alineación de memoria
+            // Verificar alineación de memoria
             if (reinterpret_cast<uintptr_t>(ptr) % alignof(T) != 0) {
                 return false;
             }
 
-            // Verifica que la página de memoria tenga permisos de lectura
-            MEMORY_BASIC_INFORMATION mbi;
-            if (VirtualQuery(reinterpret_cast<LPCVOID>(address), &mbi, sizeof(mbi))) {
-                if (!(mbi.Protect & (PAGE_READONLY | PAGE_READWRITE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE))) {
-                    return false;
-                }
-            }
-            else {
-                return false;
-            }
-
-            // Usa memcpy para copiar el valor de forma segura
+            output = {}; // Inicializar output antes de la lectura
             memcpy(&output, ptr, sizeof(T));
             return true;
         }
         __except (EXCEPTION_EXECUTE_HANDLER) {
+            output = {}; // Limpiar output en caso de excepción
             return false;
         }
     }
@@ -237,29 +254,39 @@ bool ReadUWorld() {
 }
 
 bool ReadGameInstance() {
+    if (adresses.uworld == 0) return false;
     return read<DWORD64>(adresses.uworld + offset::game_instance, adresses.game_instance);
 }
 
 bool ReadLocalPlayer() {
-    return read<DWORD64>(*(DWORD64*)(adresses.game_instance + offset::local_player), adresses.local_player);
+    if (adresses.game_instance == 0) return false;
+    DWORD64 localPlayerPtr = 0;
+    if (!read<DWORD64>(adresses.game_instance + offset::local_player, localPlayerPtr)) return false;
+    if (localPlayerPtr == 0) return false;
+    return read<DWORD64>(localPlayerPtr, adresses.local_player);
 }
 
 bool ReadPlayerController() {
+    if (adresses.local_player == 0) return false;
     return read<DWORD64>(adresses.local_player + offset::player_controller, adresses.player_controller);
 }
 
 bool ReadAcknowledgedPawn() {
+    if (adresses.player_controller == 0) return false;
     return read<DWORD64>(adresses.player_controller + offset::acknowledged_pawn, adresses.acknowledged_pawn);
 }
 
 bool ReadPlayerState() {
+    if (adresses.acknowledged_pawn == 0) return false;
     return read<DWORD64>(adresses.acknowledged_pawn + offset::player_state, adresses.player_state);
 }
 
 bool ReadGameState() {
+    if (adresses.uworld == 0) return false;
     return read<DWORD64>(adresses.uworld + offset::game_state, adresses.game_state);
 }
 
 bool ReadPlayerArray() {
+    if (adresses.game_state == 0) return false;
     return read<DWORD64>(adresses.game_state + offset::player_array, adresses.player_array);
 }

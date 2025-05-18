@@ -86,5 +86,5 @@ DWORD64 hookclass::FindPattern(char* module, char* pattern, char* mask)
 }
 
 void hookclass::GetAddreses() {
-	Uworld = GetAddr(0x7A76F40);
+	Uworld = GetAddr(0x7F1A400);
 }
