@@ -1,6 +1,7 @@
 #include "include.h"
 bool esp = false;
 bool team = false;
+bool showDebug = false;
 
 bool isInitialized = false;
 bool isMenuVisible = true;
@@ -169,8 +170,9 @@ void renderImGui() {
 			if (ImGui::BeginTabItem("Settings")) {
 				ImGui::BeginChild("SettingsChild", ImVec2(windowSize.x - 16, windowSize.y - 40), true);
 
-				ImGui::Text("Debug Info");
+				ImGui::Text("Debug Options");
 				ImGui::Separator();
+				ImGui::Checkbox("Show Debug Info", &showDebug);
 				ImGui::Text("Players Found: %d", numPlayers);
 
 				ImGui::EndChild();
@@ -184,85 +186,242 @@ void renderImGui() {
 		SetFocus(overlayWindow);
 	}
 	if (esp) {
+		// Debug counters
+		static int totalPlayersDetected = 0;
+		static int playersShown = 0;
+		static int failedCurrentPlayerActor = 0;
+		static int failedSkeletalMesh = 0;
+		static int skippedSelfPlayer = 0;
+		static int failedSurvivorStatus = 0;
+		static int failedHealth = 0;
+		static int skippedLowHealth = 0;
+		static int skippedSameTeam = 0;
+		static int failedBonePosition = 0;
+		static int skippedDistance = 0;
+		static int failedName = 0;
+		static int skippedOffScreen = 0;
+		static int failedPlayerState = 0;
+		
+		// Individual player debug info
+		static std::vector<std::string> playerDebugInfo;
+		
+		// Reset counters and debug info each frame
+		totalPlayersDetected = 0;
+		playersShown = 0;
+		failedCurrentPlayerActor = 0;
+		failedSkeletalMesh = 0;
+		skippedSelfPlayer = 0; 
+		failedPlayerState = 0;
+		failedSurvivorStatus = 0;
+		failedHealth = 0;
+		skippedLowHealth = 0;
+		skippedSameTeam = 0;
+		failedBonePosition = 0;
+		skippedDistance = 0;
+		failedName = 0;
+		skippedOffScreen = 0;
+		playerDebugInfo.clear();
+		
 		if (ReadValues()) {
-			if (read<int>(adresses.game_state + (0x2A8 + sizeof(uintptr_t)), numPlayers)) {
-				int ackteamid;
-				read<int>(adresses.acknowledged_pawn + 0xFA0, ackteamid);
-				for (int i = 0; i < numPlayers; ++i) {
-					DWORD64 playerState;
-					if (!read<DWORD64>(adresses.player_array + (i * sizeof(uintptr_t)), playerState)) continue;
 
-					DWORD64 currentPlayerActor;
-					if (!read<DWORD64>(playerState + offset::pawn_private, currentPlayerActor)) continue;
+			double healthL;
+			read<double>(adresses.survivor_status + 0x00B0, healthL);
+			if (healthL > 1) {
+				if (read<int>(adresses.game_state + (0x320 + sizeof(uintptr_t)), numPlayers)) {
+					totalPlayersDetected = numPlayers;
+					//read<int>(adresses.acknowledged_pawn + 0xF21, ackteamid);
+					int ackteamid = *(int*)(adresses.acknowledged_pawn + 0xF21);
+					POV = *(FMinimalViewInfo*)(adresses.camera_manager + 0x12D0);
+					for (int i = 0; i < numPlayers; ++i) {
+						char playerInfo[200];
 
-					DWORD64 skeletalMesh;
-					if (!read<DWORD64>(currentPlayerActor + offset::skeletal_mesh, skeletalMesh)) continue;
+						DWORD64 currentPlayerActor;
+						if (!read<DWORD64>((adresses.player_array + 0x8) + (i * 0x370), currentPlayerActor)) {
+							failedCurrentPlayerActor++;
+							sprintf_s(playerInfo, sizeof(playerInfo), "Player %d: FAILED - No CurrentPlayerActor", i);
+							playerDebugInfo.push_back(std::string(playerInfo));
+							continue;
+						}
 
-					if (!adresses.acknowledged_pawn || currentPlayerActor == adresses.acknowledged_pawn) continue;
+						DWORD64 playerState;
+						if (!read<DWORD64>(currentPlayerActor + 0x2B0, playerState)) {
+							failedPlayerState++;
+							sprintf_s(playerInfo, sizeof(playerInfo), "Player %d: FAILED - No PlayerState", i);
+							playerDebugInfo.push_back(std::string(playerInfo));
+							continue;
+						}
 
-					DWORD64 survivorStatus;
-					if (!read<DWORD64>(currentPlayerActor + 0x0638, survivorStatus)) continue;
+						DWORD64 skeletalMesh;
+						if (!read<DWORD64>(currentPlayerActor + offset::skeletal_mesh, skeletalMesh)) {
+							failedSkeletalMesh++;
+							sprintf_s(playerInfo, sizeof(playerInfo), "Player %d: FAILED - No SkeletalMesh", i);
+							playerDebugInfo.push_back(std::string(playerInfo));
+							continue;
+						}
 
-					double health;
-					if (!read<double>(survivorStatus + 0x00B0, health)) continue;
+						if (!adresses.acknowledged_pawn || currentPlayerActor == adresses.acknowledged_pawn) {
+							skippedSelfPlayer++;
+							sprintf_s(playerInfo, sizeof(playerInfo), "Player %d: SKIPPED - Self Player", i);
+							playerDebugInfo.push_back(std::string(playerInfo));
+							continue;
+						}
 
-					auto& showHealth = playerHealthStates[currentPlayerActor];
+						DWORD64 survivorStatus;
+						if (!read<DWORD64>(currentPlayerActor + 0x0640, survivorStatus)) {
+							failedSurvivorStatus++;
+							sprintf_s(playerInfo, sizeof(playerInfo), "Player %d: FAILED - No SurvivorStatus", i);
+							playerDebugInfo.push_back(std::string(playerInfo));
+							continue;
+						}
 
-					if (health <= 1) {
-						showHealth = false;
-					}
-					else if (health >= 100) {
-						showHealth = true;
-					}
+						double health;
+						if (!read<double>(survivorStatus + 0x00B0, health)) {
+							failedHealth++;
+							sprintf_s(playerInfo, sizeof(playerInfo), "Player %d: FAILED - No Health", i);
+							playerDebugInfo.push_back(std::string(playerInfo));
+							continue;
+						}
 
-					if (!showHealth) continue;
+						auto& showHealth = playerHealthStates[currentPlayerActor];
 
-					int teamIndex = 0;
-					if (team)
-						if (!read<int>(currentPlayerActor + 0xFA0, teamIndex)) continue;
+						if (health <= 1) {
+							showHealth = false;
+						}
+						else if (health >= 100) {
+							showHealth = true;
+						}
 
-					if (team && teamIndex == ackteamid) continue;
+						if (!showHealth) {
+							skippedLowHealth++;
+							sprintf_s(playerInfo, sizeof(playerInfo), "Player %d: SKIPPED - Low Health (%.1f)", i, health);
+							playerDebugInfo.push_back(std::string(playerInfo));
+							continue;
+						}
 
-					camera_postion = get_camera();
+						int teamIndex = 0;
+						teamIndex = *(int*)(currentPlayerActor + 0xF21);
+						//if (!read<int>(currentPlayerActor + 0xF21, teamIndex)) continue;
 
-					if (!skeletalMesh) continue;
-					fvector base = get_bone_3d(skeletalMesh, bone::Root);
-					fvector top = get_bone_3d(skeletalMesh, bone::Root);
-					top.z += 180;
-					if (base.x == 0 && base.y == 0 && base.z == 0) continue;
-					if (top.x == 0 && top.y == 0 && top.z == 0) continue;
-					fvector2d root = w2s(base);
-					fvector2d head = w2s(top);
+						if (team && teamIndex == ackteamid) {
+							skippedSameTeam++;
+							sprintf_s(playerInfo, sizeof(playerInfo), "Player %d: SKIPPED - Same Team (%d)", i, teamIndex);
+							playerDebugInfo.push_back(std::string(playerInfo));
+							continue;
+						}
 
-					float distance = camera_postion.location.distance(base) / 100;
+						if (!skeletalMesh) {
+							failedSkeletalMesh++;
+							sprintf_s(playerInfo, sizeof(playerInfo), "Player %d: FAILED - Null SkeletalMesh", i);
+							playerDebugInfo.push_back(std::string(playerInfo));
+							continue;
+						}
 
-					if (distance > distancelimit)
-						continue;
+						fvector base = get_bone_3d(skeletalMesh, bone::Root);
+						fvector top = get_bone_3d(skeletalMesh, bone::Root);
+						top.z += 180;
+						if (base.x == 0 && base.y == 0 && base.z == 0) {
+							failedBonePosition++;
+							sprintf_s(playerInfo, sizeof(playerInfo), "Player %d: FAILED - Invalid Base Position", i);
+							playerDebugInfo.push_back(std::string(playerInfo));
+							continue;
+						}
+						if (top.x == 0 && top.y == 0 && top.z == 0) {
+							failedBonePosition++;
+							sprintf_s(playerInfo, sizeof(playerInfo), "Player %d: FAILED - Invalid Top Position", i);
+							playerDebugInfo.push_back(std::string(playerInfo));
+							continue;
+						}
 
-					name = (Name*)(playerState);
-					if (!name) continue;
+						fvector2d root = w2s(base);
 
-					if (root.x > 0 && root.y > 0 && root.x < widthscreen && root.y < heightscreen) {
-						float textSpacing = 15.0f;
-						fvector2d namePos = head;
-						namePos.y -= (textSpacing - 5);
+						fvector2d head = w2s(top);
 
-						fvector2d healthPos = root;
-						healthPos.y += textSpacing;
+						float distance = POV.Location.distance(base) / 100;
 
-						fvector2d distancePos = healthPos;
-						distancePos.y += textSpacing;
+						if (distance > distancelimit) {
+							skippedDistance++;
+							sprintf_s(playerInfo, sizeof(playerInfo), "Player %d: SKIPPED - Too Far (%.1fm > %.1fm)", i, distance, distancelimit);
+							playerDebugInfo.push_back(std::string(playerInfo));
+							continue;
+						}
 
-						sprintf_s(cdistance, sizeof(cdistance), "[%0.fm]", distance);
-						sprintf_s(chealth, sizeof(chealth), "HP:%0.f", health);
+						name = (Name*)(playerState);
+						if (!name) {
+							failedName++;
+							sprintf_s(playerInfo, sizeof(playerInfo), "Player %d: FAILED - No Name", i);
+							playerDebugInfo.push_back(std::string(playerInfo));
+						}
 
-						DrawT(namePos, WideToString(name->ptr1->Name).c_str(), 1, ImColor(255, 0, 0));
-						DrawT(healthPos, chealth, 1, ImColor(255, 0, 0));
-						DrawT(distancePos, cdistance, 1, ImColor(255, 0, 0));
+						if (root.x > 0 && root.y > 0 && root.x < widthscreen && root.y < heightscreen) {
+							playersShown++;
+							sprintf_s(playerInfo, sizeof(playerInfo), "Player %d: SHOWN - HP:%.1f Dist:%.1fm Team:%d", i, health, distance, teamIndex);
+							playerDebugInfo.push_back(std::string(playerInfo));
 
-						DrawBones(skeletalMesh, is_visible(skeletalMesh), camera_postion);
+							float textSpacing = 15.0f;
+							fvector2d namePos = head;
+							namePos.y -= (textSpacing - 5);
+
+							fvector2d healthPos = root;
+							healthPos.y += textSpacing;
+
+							fvector2d distancePos = healthPos;
+							distancePos.y += textSpacing;
+
+							sprintf_s(cdistance, sizeof(cdistance), "[%0.fm]", distance);
+							sprintf_s(chealth, sizeof(chealth), "HP:%0.f", health);
+
+							ImColor playerColor = teamIndex == ackteamid ? ImColor(0, 0, 255) : ImColor(255, 0, 0);
+
+							if (name)
+								DrawT(namePos, WideToString(name->ptr1->Name).c_str(), 1, playerColor);
+							DrawT(healthPos, chealth, 1, playerColor);
+							DrawT(distancePos, cdistance, 1, playerColor);
+
+							DrawBones(skeletalMesh, is_visible(skeletalMesh), POV);
+						}
+						else {
+							skippedOffScreen++;
+							sprintf_s(playerInfo, sizeof(playerInfo), "Player %d: SKIPPED - Off Screen (%.1f,%.1f)", i, root.x, root.y);
+							playerDebugInfo.push_back(std::string(playerInfo));
+						}
 					}
 				}
+			}
+		}
+		
+		// Draw individual player debug information (only if enabled)
+		if (showDebug) {
+			fvector2d debugPos = {160, 10};
+			float lineSpacing = 12.0f;
+			char debugLine[100];
+			
+			// Title and summary
+			DrawT(debugPos, "=== PLAYER DEBUG INFO ===", 1, ImColor(255, 255, 0));
+			debugPos.y += lineSpacing;
+			
+			sprintf_s(debugLine, sizeof(debugLine), "Total: %d | Shown: %d", totalPlayersDetected, playersShown);
+			DrawT(debugPos, debugLine, 1, ImColor(255, 255, 255));
+			debugPos.y += lineSpacing + 3;
+			
+			// Individual player information
+			for (size_t i = 0; i < playerDebugInfo.size() && i < 15; ++i) { // Limit to 15 players to avoid screen overflow
+				ImColor color;
+				if (playerDebugInfo[i].find("SHOWN") != std::string::npos) {
+					color = ImColor(0, 255, 0); // Green for shown players
+				} else if (playerDebugInfo[i].find("FAILED") != std::string::npos) {
+					color = ImColor(255, 0, 0); // Red for failed players
+				} else {
+					color = ImColor(255, 165, 0); // Orange for skipped players
+				}
+				
+				DrawT(debugPos, playerDebugInfo[i].c_str(), 1, color);
+				debugPos.y += lineSpacing;
+			}
+			
+			// Show if there are more players
+			if (playerDebugInfo.size() > 15) {
+				sprintf_s(debugLine, sizeof(debugLine), "... and %d more players", (int)(playerDebugInfo.size() - 15));
+				DrawT(debugPos, debugLine, 1, ImColor(128, 128, 128));
 			}
 		}
 	}

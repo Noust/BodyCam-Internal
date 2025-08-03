@@ -9,6 +9,7 @@
 #include <Psapi.h>
 #include <dwmapi.h>
 #include <DirectX/d3d9.h>
+#include <DirectX/d3dx9math.h>
 #include <ImGui/imgui.h>
 #include <ImGui/imgui_impl_dx9.h>
 #include <ImGui/imgui_impl_win32.h>

@@ -1,19 +1,6 @@
 #pragma once
 #include "include.h"
 
-struct camera_position_s {
-	fvector location{};
-	fvector rotation{};
-	float fov{};
-};
-inline camera_position_s camera_postion{};
-camera_position_s camera;
-
-struct FNRot {
-	double a, b, c;
-};
-FNRot fnRot;
-
 fvector get_bone_3d(uintptr_t skeletal_mesh, int bone_index)
 {
 	DWORD64 bonearray;
@@ -41,35 +28,6 @@ fvector get_bone_3d(uintptr_t skeletal_mesh, int bone_index)
 	return fvector(Matrix._41, Matrix._42, Matrix._43);
 }
 
-camera_position_s get_camera() {
-	if (!adresses.uworld || !offset::game_instance || !offset::local_player ||
-		!offset::player_controller || !adresses.player_controller) {
-		return {};
-	}
-
-	DWORD64 location_pointer;
-	DWORD64 rotation_pointer;
-
-	if (!read<DWORD64>(adresses.uworld + 0x110, location_pointer) ||
-		!read<DWORD64>(adresses.uworld + 0x120, rotation_pointer)) {
-		return {};
-	}
-
-	if (!location_pointer || !rotation_pointer)
-		return {};
-
-	fnRot.a = *(double*)(rotation_pointer);
-	fnRot.b = *(double*)(rotation_pointer + 0x20);
-	fnRot.c = *(double*)(rotation_pointer + 0x1d0);
-
-	camera.location = *(fvector*)(location_pointer);
-	camera.rotation.x = asin(fnRot.c) * (180.0 / M_PI);
-	camera.rotation.y = ((atan2(fnRot.a * -1, fnRot.b) * (180.0 / M_PI)) * -1) * -1;
-	camera.fov = *(float*)((DWORD64)adresses.player_controller + 0x394) * 90.f;
-
-	return camera;
-}
-
 bool is_visible(uintptr_t skeletal_mesh) {
 	float last_submit;
 	float last_render;
@@ -87,12 +45,12 @@ inline fvector2d w2s(fvector WorldLocation) {
 	if (WorldLocation.x == 0 || WorldLocation.y == 0 || WorldLocation.z == 0)
 		return fvector2d(0, 0);
 
-	_MATRIX tempMatrix = Matrix(camera_postion.rotation);
+	D3DXMATRIX tempMatrix = Matrix(POV.Rotation);
 
 	fvector vAxisX = fvector(tempMatrix.m[0][0], tempMatrix.m[0][1], tempMatrix.m[0][2]);
 	fvector vAxisY = fvector(tempMatrix.m[1][0], tempMatrix.m[1][1], tempMatrix.m[1][2]);
 	fvector vAxisZ = fvector(tempMatrix.m[2][0], tempMatrix.m[2][1], tempMatrix.m[2][2]);
-	fvector vDelta = WorldLocation - camera_postion.location;
+	fvector vDelta = WorldLocation - POV.Location;
 	fvector vTransformed = fvector(vDelta.dot(vAxisY), vDelta.dot(vAxisZ), vDelta.dot(vAxisX));
 
 	if (vTransformed.z < 1.f)
@@ -103,8 +61,8 @@ inline fvector2d w2s(fvector WorldLocation) {
 	}
 
 	return fvector2d(
-		(widthscreen / 2.0f) + vTransformed.x * (((widthscreen / 2.0f) / tanf(camera_postion.fov * (float)M_PI / 360.f))) / vTransformed.z,
-		(heightscreen / 2.0f) - vTransformed.y * (((widthscreen / 2.0f) / tanf(camera_postion.fov * (float)M_PI / 360.f))) / vTransformed.z
+		(widthscreen / 2.0f) + vTransformed.x * (((widthscreen / 2.0f) / tanf(POV.FOV * (float)M_PI / 360.f))) / vTransformed.z,
+		(heightscreen / 2.0f) - vTransformed.y * (((widthscreen / 2.0f) / tanf(POV.FOV * (float)M_PI / 360.f))) / vTransformed.z
 	);
 }
 

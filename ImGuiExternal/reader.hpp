@@ -204,8 +204,10 @@ struct world {
     DWORD64 game_instance;
     DWORD64 local_player;
     DWORD64 player_controller;
+    DWORD64 camera_manager;
     DWORD64 acknowledged_pawn;
     DWORD64 player_state;
+	DWORD64 survivor_status;
     DWORD64 game_state;
     DWORD64 player_array;
 };
@@ -216,10 +218,12 @@ bool ReadUWorld();
 bool ReadGameInstance();
 bool ReadLocalPlayer();
 bool ReadPlayerController();
+bool ReadCameraManager();
 bool ReadAcknowledgedPawn();
 bool ReadPlayerState();
 bool ReadGameState();
 bool ReadPlayerArray();
+bool ReadSurvivorStatus();
 
 bool ReadValues() {
     if (!ReadUWorld())
@@ -234,10 +238,16 @@ bool ReadValues() {
     if (!ReadPlayerController())
         return false;
 
+    if (!ReadCameraManager())
+		return false;
+
     if (!ReadAcknowledgedPawn())
         return false;
 
     if (!ReadPlayerState())
+        return false;
+
+    if (!ReadSurvivorStatus())
         return false;
 
     if (!ReadGameState())
@@ -271,6 +281,11 @@ bool ReadPlayerController() {
     return read<DWORD64>(adresses.local_player + offset::player_controller, adresses.player_controller);
 }
 
+bool ReadCameraManager() {
+    if (adresses.player_controller == 0) return false;
+    return read<DWORD64>(adresses.player_controller + offset::camera_manager, adresses.camera_manager);
+}
+
 bool ReadAcknowledgedPawn() {
     if (adresses.player_controller == 0) return false;
     return read<DWORD64>(adresses.player_controller + offset::acknowledged_pawn, adresses.acknowledged_pawn);
@@ -279,6 +294,11 @@ bool ReadAcknowledgedPawn() {
 bool ReadPlayerState() {
     if (adresses.acknowledged_pawn == 0) return false;
     return read<DWORD64>(adresses.acknowledged_pawn + offset::player_state, adresses.player_state);
+}
+
+bool ReadSurvivorStatus() {
+    if (adresses.acknowledged_pawn == 0) return false;
+    return read<DWORD64>(adresses.acknowledged_pawn + offset::SurvivorStatus, adresses.survivor_status);
 }
 
 bool ReadGameState() {

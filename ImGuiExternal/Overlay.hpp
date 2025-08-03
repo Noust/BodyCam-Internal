@@ -216,7 +216,7 @@ void DrawBackgroundAnimation() {
     }
 }
 
-void DrawBones(DWORD64 sekeltalmesh, bool visible, camera_position_s camera_postion) {
+void DrawBones(DWORD64 sekeltalmesh, bool visible, FMinimalViewInfo camera) {
     if (!sekeltalmesh) return;
 
     static ImColor green(0, 255, 0);
@@ -246,7 +246,7 @@ void DrawBones(DWORD64 sekeltalmesh, bool visible, camera_position_s camera_post
         }
 
         // Draw head circle - calcular radio una sola vez
-        float radius = std::clamp(static_cast<float>(15.0f / (camera_postion.location.distance(head_pos) * 0.002f)), 3.0f, 15.0f);
+        float radius = std::clamp(static_cast<float>(15.0f / (camera.Location.distance(head_pos) * 0.002f)), 3.0f, 15.0f);
         DrawCircle(bones[0], radius, 0, color);
 
         // Connections como array estático
@@ -263,5 +263,5 @@ void DrawBones(DWORD64 sekeltalmesh, bool visible, camera_position_s camera_post
             DrawLine(bones[first], bones[second], color, 0, true);
         }
     }
-    catch (...) {} // Manejo de errores simplificado para mejor rendimiento
+    catch (...) {}
 }

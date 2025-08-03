@@ -30,6 +30,12 @@ struct Vector2 {
 struct Vector3 {
 	float x, y, z;
 
+	// Default constructor
+	Vector3() : x(0.0f), y(0.0f), z(0.0f) {}
+	
+	// Constructor with three float parameters
+	Vector3(float _x, float _y, float _z) : x(_x), y(_y), z(_z) {}
+
 	Vector3 operator+(Vector3 V) {
 		return { V.x + x, V.y + y, V.z + z };
 	}
@@ -44,6 +50,10 @@ struct Vector3 {
 
 	Vector3 operator/(Vector3 V) {
 		return { V.x / x, V.y / y, V.z / z };
+	}
+
+	float dot(Vector3 V) {
+		return x * V.x + y * V.y + z * V.z;
 	}
 
 	float distance(Vector3 V) {
@@ -107,14 +117,6 @@ public:
 };
 
 
-
-struct FRotator {
-	float Pitch;
-	float Yaw;
-	float Roll;
-};
-
-
 class fvector
 {
 public:
@@ -174,14 +176,14 @@ struct fquat
 	double z;
 	double w;
 };
-struct frotator
+
+struct FMinimalViewInfo
 {
-	double Pitch;
-	double Yaw;
-	double Roll;
+	fvector Location;
+	fvector Rotation;
+	float FOV;
 };
-
-
+FMinimalViewInfo POV;
 
 struct FTransform
 {
@@ -256,32 +258,21 @@ inline D3DMATRIX MatrixMultiplication(D3DMATRIX pM1, D3DMATRIX pM2)
 	return pOut;
 }
 #define PI 3.14159265358979323846f
-struct _MATRIX {
-	union {
-		struct {
-			float        _11, _12, _13, _14;
-			float        _21, _22, _23, _24;
-			float        _31, _32, _33, _34;
-			float        _41, _42, _43, _44;
 
-		};
-		float m[4][4];
-	};
-};
-inline _MATRIX Matrix(fvector Vec4, fvector origin = fvector(0, 0, 0))
+D3DXMATRIX Matrix(fvector rot, fvector origin = fvector(0, 0, 0))
 {
-	
-		double radPitch = (Vec4.x * double(M_PI) / 180.f);
-	double radYaw = (Vec4.y * double(M_PI) / 180.f);
-	double radRoll = (Vec4.z * double(M_PI) / 180.f);
+	float radPitch = (rot.x * float(M_PI) / 180.f);
+	float radYaw = (rot.y * float(M_PI) / 180.f);
+	float radRoll = (rot.z * float(M_PI) / 180.f);
 
-	double SP = sinf(radPitch);
-	double CP = cosf(radPitch);
-	double SY = sinf(radYaw);
-	double CY = cosf(radYaw);
-	double SR = sinf(radRoll);
-	double CR = cosf(radRoll);
-	_MATRIX matrix;
+	float SP = sinf(radPitch);
+	float CP = cosf(radPitch);
+	float SY = sinf(radYaw);
+	float CY = cosf(radYaw);
+	float SR = sinf(radRoll);
+	float CR = cosf(radRoll);
+
+	D3DMATRIX matrix;
 	matrix.m[0][0] = CP * CY;
 	matrix.m[0][1] = CP * SY;
 	matrix.m[0][2] = SP;

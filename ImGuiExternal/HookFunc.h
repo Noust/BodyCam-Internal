@@ -6,6 +6,7 @@ enum offset {
 	game_state = 0x158,
 	local_player = 0x38,
 	player_controller = 0x30,
+	camera_manager = 0x348,
 	acknowledged_pawn = 0x338,
 	skeletal_mesh = 0x318,
 	player_state = 0x2B0,
@@ -14,11 +15,12 @@ enum offset {
 	relative_location = 0x120,
 	relative_rotation = 0x138,
 	team_index = 0x1211,
-	player_array = 0x2A8,
+	player_array = 0x320,
 	pawn_private = 0x308,
 	component_to_world = 0x240,
 	b_Allow_Targeting = 0xe40,
 	location_under_reticle = 0x2530,
+	SurvivorStatus = 0x640
 
 };
 
