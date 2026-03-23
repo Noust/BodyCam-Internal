@@ -223,20 +223,18 @@ void renderImGui() {
 		playerDebugInfo.clear();
 		
 		if (ReadValues()) {
-
 			double healthL;
-			read<double>(adresses.survivor_status + 0x00B0, healthL);
+			read<double>(adresses.survivor_status + offset::health, healthL);
 			if (healthL > 1) {
-				if (read<int>(adresses.game_state + (0x320 + sizeof(uintptr_t)), numPlayers)) {
+				if (read<int>(adresses.game_state + (offset::player_array + sizeof(uintptr_t)), numPlayers)) {
 					totalPlayersDetected = numPlayers;
-					//read<int>(adresses.acknowledged_pawn + 0xF21, ackteamid);
-					int ackteamid = *(int*)(adresses.acknowledged_pawn + 0xF21);
-					POV = *(FMinimalViewInfo*)(adresses.camera_manager + 0x12D0);
+					int ackteamid = *(int*)(adresses.acknowledged_pawn + offset::team_index_pawn);
+					readRaw<FMinimalViewInfo>(adresses.camera_manager + offset::pov_info, POV);
 					for (int i = 0; i < numPlayers; ++i) {
 						char playerInfo[200];
 
 						DWORD64 currentPlayerActor;
-						if (!read<DWORD64>((adresses.player_array + 0x8) + (i * 0x370), currentPlayerActor)) {
+						if (!read<DWORD64>((adresses.player_array + offset::player_array_data) + (i * offset::player_array_stride), currentPlayerActor)) {
 							failedCurrentPlayerActor++;
 							sprintf_s(playerInfo, sizeof(playerInfo), "Player %d: FAILED - No CurrentPlayerActor", i);
 							playerDebugInfo.push_back(std::string(playerInfo));
@@ -244,20 +242,20 @@ void renderImGui() {
 						}
 
 						DWORD64 playerState;
-						if (!read<DWORD64>(currentPlayerActor + 0x2B0, playerState)) {
+						if (!read<DWORD64>(currentPlayerActor + offset::player_state, playerState)) {
 							failedPlayerState++;
 							sprintf_s(playerInfo, sizeof(playerInfo), "Player %d: FAILED - No PlayerState", i);
 							playerDebugInfo.push_back(std::string(playerInfo));
 							continue;
 						}
 
-						DWORD64 skeletalMesh;
+						/*DWORD64 skeletalMesh;
 						if (!read<DWORD64>(currentPlayerActor + offset::skeletal_mesh, skeletalMesh)) {
 							failedSkeletalMesh++;
 							sprintf_s(playerInfo, sizeof(playerInfo), "Player %d: FAILED - No SkeletalMesh", i);
 							playerDebugInfo.push_back(std::string(playerInfo));
 							continue;
-						}
+						}*/
 
 						if (!adresses.acknowledged_pawn || currentPlayerActor == adresses.acknowledged_pawn) {
 							skippedSelfPlayer++;
@@ -267,7 +265,7 @@ void renderImGui() {
 						}
 
 						DWORD64 survivorStatus;
-						if (!read<DWORD64>(currentPlayerActor + 0x0640, survivorStatus)) {
+						if (!read<DWORD64>(currentPlayerActor + offset::SurvivorStatus, survivorStatus)) {
 							failedSurvivorStatus++;
 							sprintf_s(playerInfo, sizeof(playerInfo), "Player %d: FAILED - No SurvivorStatus", i);
 							playerDebugInfo.push_back(std::string(playerInfo));
@@ -275,7 +273,7 @@ void renderImGui() {
 						}
 
 						double health;
-						if (!read<double>(survivorStatus + 0x00B0, health)) {
+						if (!read<double>(survivorStatus + offset::health, health)) {
 							failedHealth++;
 							sprintf_s(playerInfo, sizeof(playerInfo), "Player %d: FAILED - No Health", i);
 							playerDebugInfo.push_back(std::string(playerInfo));
@@ -298,9 +296,7 @@ void renderImGui() {
 							continue;
 						}
 
-						int teamIndex = 0;
-						teamIndex = *(int*)(currentPlayerActor + 0xF21);
-						//if (!read<int>(currentPlayerActor + 0xF21, teamIndex)) continue;
+						int teamIndex = *(int*)(currentPlayerActor + offset::team_index_pawn);
 
 						if (team && teamIndex == ackteamid) {
 							skippedSameTeam++;
@@ -309,14 +305,14 @@ void renderImGui() {
 							continue;
 						}
 
-						if (!skeletalMesh) {
+						/*if (!skeletalMesh) {
 							failedSkeletalMesh++;
 							sprintf_s(playerInfo, sizeof(playerInfo), "Player %d: FAILED - Null SkeletalMesh", i);
 							playerDebugInfo.push_back(std::string(playerInfo));
 							continue;
-						}
+						}*/
 
-						fvector base = get_bone_3d(skeletalMesh, bone::Root);
+						/*fvector base = get_bone_3d(skeletalMesh, bone::Root);
 						fvector top = get_bone_3d(skeletalMesh, bone::Root);
 						top.z += 180;
 						if (base.x == 0 && base.y == 0 && base.z == 0) {
@@ -330,10 +326,35 @@ void renderImGui() {
 							sprintf_s(playerInfo, sizeof(playerInfo), "Player %d: FAILED - Invalid Top Position", i);
 							playerDebugInfo.push_back(std::string(playerInfo));
 							continue;
+						}*/
+
+						DWORD64 rootComponent;
+						if (!read<DWORD64>(currentPlayerActor + offset::root_component, rootComponent)) {
+							failedBonePosition++;
+							sprintf_s(playerInfo, sizeof(playerInfo), "Player %d: FAILED - No Root Component", i);
+							playerDebugInfo.push_back(std::string(playerInfo));
+							continue;
 						}
 
-						fvector2d root = w2s(base);
+						fvector base(0, 0, 0);
+						if (!readRaw<fvector>(rootComponent + offset::relative_location, base)) {
+							failedBonePosition++;
+							sprintf_s(playerInfo, sizeof(playerInfo), "Player %d: FAILED - Invalid Base Position", i);
+							playerDebugInfo.push_back(std::string(playerInfo));
+							continue;
+						}
+						if (base.x == 0 && base.y == 0 && base.z == 0) {
+							failedBonePosition++;
+							sprintf_s(playerInfo, sizeof(playerInfo), "Player %d: FAILED - Invalid Base Position", i);
+							playerDebugInfo.push_back(std::string(playerInfo));
+							continue;
+						}
 
+						base.z -= 90;
+						fvector top = base;
+						top.z += 180;
+
+						fvector2d root = w2s(base);
 						fvector2d head = w2s(top);
 
 						float distance = POV.Location.distance(base) / 100;
@@ -345,8 +366,13 @@ void renderImGui() {
 							continue;
 						}
 
-						name = (Name*)(playerState);
-						if (!name) {
+						// Lectura segura en dos pasos: leer ptr1 y luego el struct Nameptr
+						DWORD64 nameptr1 = 0;
+						Nameptr nameData{};
+						bool validName = read<DWORD64>(playerState + 0x340, nameptr1) &&
+							nameptr1 != 0 &&
+							read<Nameptr>(nameptr1, nameData);
+						if (!validName) {
 							failedName++;
 							sprintf_s(playerInfo, sizeof(playerInfo), "Player %d: FAILED - No Name", i);
 							playerDebugInfo.push_back(std::string(playerInfo));
@@ -372,12 +398,13 @@ void renderImGui() {
 
 							ImColor playerColor = teamIndex == ackteamid ? ImColor(0, 0, 255) : ImColor(255, 0, 0);
 
-							if (name)
-								DrawT(namePos, WideToString(name->ptr1->Name).c_str(), 1, playerColor);
+							if (validName)
+								DrawT(namePos, WideToString(nameData.Name).c_str(), 1, playerColor);
 							DrawT(healthPos, chealth, 1, playerColor);
 							DrawT(distancePos, cdistance, 1, playerColor);
 
-							DrawBones(skeletalMesh, is_visible(skeletalMesh), POV);
+							//DrawBones(skeletalMesh, is_visible(skeletalMesh), POV);
+							drawbox(root, (root.y - head.y), (root.y - head.y) / 4, playerColor, 0);
 						}
 						else {
 							skippedOffScreen++;
@@ -402,7 +429,20 @@ void renderImGui() {
 			sprintf_s(debugLine, sizeof(debugLine), "Total: %d | Shown: %d", totalPlayersDetected, playersShown);
 			DrawT(debugPos, debugLine, 1, ImColor(255, 255, 255));
 			debugPos.y += lineSpacing + 3;
-			
+
+			// POV info
+			DrawT(debugPos, "=== POV INFO ===", 1, ImColor(255, 255, 0));
+			debugPos.y += lineSpacing;
+			sprintf_s(debugLine, sizeof(debugLine), "Loc: X=%.1f Y=%.1f Z=%.1f", POV.Location.x, POV.Location.y, POV.Location.z);
+			DrawT(debugPos, debugLine, 1, ImColor(0, 200, 255));
+			debugPos.y += lineSpacing;
+			sprintf_s(debugLine, sizeof(debugLine), "Rot: P=%.2f Y=%.2f R=%.2f", POV.Rotation.x, POV.Rotation.y, POV.Rotation.z);
+			DrawT(debugPos, debugLine, 1, ImColor(0, 200, 255));
+			debugPos.y += lineSpacing;
+			sprintf_s(debugLine, sizeof(debugLine), "FOV: %.1f", POV.FOV);
+			DrawT(debugPos, debugLine, 1, ImColor(0, 200, 255));
+			debugPos.y += lineSpacing + 3;
+
 			// Individual player information
 			for (size_t i = 0; i < playerDebugInfo.size() && i < 15; ++i) { // Limit to 15 players to avoid screen overflow
 				ImColor color;

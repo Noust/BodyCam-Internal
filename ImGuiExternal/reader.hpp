@@ -78,6 +78,33 @@ inline bool read(uintptr_t address, T& output) {
     return MemoryReader<T>::ReadMemory(address, output);
 }
 
+// Para tipos no trivialmente copiables (fvector, FMinimalViewInfo, etc.)
+// Usa memcpy con VirtualQuery + SEH para no crashear el proceso
+template<typename T>
+inline bool readRaw(uintptr_t address, T& output) {
+    if (address == 0 || address == UINTPTR_MAX)
+        return false;
+
+    MEMORY_BASIC_INFORMATION mbi{};
+    if (!VirtualQuery(reinterpret_cast<LPCVOID>(address), &mbi, sizeof(mbi)))
+        return false;
+
+    if (address + sizeof(T) > reinterpret_cast<uintptr_t>(mbi.BaseAddress) + mbi.RegionSize)
+        return false;
+
+    if (!(mbi.State == MEM_COMMIT &&
+         (mbi.Protect & (PAGE_READONLY | PAGE_READWRITE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE))))
+        return false;
+
+    __try {
+        memcpy(&output, reinterpret_cast<const void*>(address), sizeof(T));
+        return true;
+    }
+    __except(EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
 /*template<typename T>
 inline T readIn(uintptr_t address, const T& defaultValue = T()) {
     return MemoryReader<T>::ReadMemorySafe(address, defaultValue);

@@ -216,52 +216,52 @@ void DrawBackgroundAnimation() {
     }
 }
 
-void DrawBones(DWORD64 sekeltalmesh, bool visible, FMinimalViewInfo camera) {
-    if (!sekeltalmesh) return;
-
-    static ImColor green(0, 255, 0);
-    static ImColor red(255, 0, 0);
-    ImColor color = visible ? green : red;
-
-    try {
-        // Pre-allocate vector capacity
-        std::vector<fvector2d> bones;
-        bones.reserve(20);  // Reservar espacio exacto que necesitamos
-
-        // Cache bone positions in one go
-        fvector head_pos = get_bone_3d(sekeltalmesh, bone::head);
-        bones.push_back(w2s(head_pos));
-
-        static const int bone_ids[] = {
-            bone::neck, bone::chest, bone::stomage, bone::up_penis, bone::penis,
-            bone::left_shoulder, bone::left_elbow, bone::left_hand,
-            bone::right_shoulder, bone::right_elbow, bone::right_hand,
-            bone::left_pelvis, bone::left_knee, bone::left_foot_up, bone::left_foot,
-            bone::right_pelvis, bone::right_knee, bone::right_foot_up, bone::right_foot
-        };
-
-        // Usar array estático en lugar de vector para connections
-        for (int id : bone_ids) {
-            bones.push_back(w2s(get_bone_3d(sekeltalmesh, id)));
-        }
-
-        // Draw head circle - calcular radio una sola vez
-        float radius = std::clamp(static_cast<float>(15.0f / (camera.Location.distance(head_pos) * 0.002f)), 3.0f, 15.0f);
-        DrawCircle(bones[0], radius, 0, color);
-
-        // Connections como array estático
-        static const std::pair<int, int> connections[] = {
-            {0,1}, {1,2}, {2,3}, {3,4}, {4,5},  // Spine
-            {1,6}, {6,7}, {7,8},   // Left arm
-            {1,9}, {9,10}, {10,11}, // Right arm
-            {5,12}, {12,13}, {13,14}, {14,15},  // Left leg
-            {5,16}, {16,17}, {17,18}, {18,19}   // Right leg
-        };
-
-        // Draw all lines
-        for (const auto& [first, second] : connections) {
-            DrawLine(bones[first], bones[second], color, 0, true);
-        }
-    }
-    catch (...) {}
-}
+//void DrawBones(DWORD64 sekeltalmesh, bool visible, FMinimalViewInfo camera) {
+//    if (!sekeltalmesh) return;
+//
+//    static ImColor green(0, 255, 0);
+//    static ImColor red(255, 0, 0);
+//    ImColor color = visible ? green : red;
+//
+//    try {
+//        // Pre-allocate vector capacity
+//        std::vector<fvector2d> bones;
+//        bones.reserve(20);  // Reservar espacio exacto que necesitamos
+//
+//        // Cache bone positions in one go
+//        fvector head_pos = get_bone_3d(sekeltalmesh, bone::head);
+//        bones.push_back(w2s(head_pos));
+//
+//        static const int bone_ids[] = {
+//            bone::neck, bone::chest, bone::stomage, bone::up_penis, bone::penis,
+//            bone::left_shoulder, bone::left_elbow, bone::left_hand,
+//            bone::right_shoulder, bone::right_elbow, bone::right_hand,
+//            bone::left_pelvis, bone::left_knee, bone::left_foot_up, bone::left_foot,
+//            bone::right_pelvis, bone::right_knee, bone::right_foot_up, bone::right_foot
+//        };
+//
+//        // Usar array estático en lugar de vector para connections
+//        for (int id : bone_ids) {
+//            bones.push_back(w2s(get_bone_3d(sekeltalmesh, id)));
+//        }
+//
+//        // Draw head circle - calcular radio una sola vez
+//        float radius = std::clamp(static_cast<float>(15.0f / (camera.Location.distance(head_pos) * 0.002f)), 3.0f, 15.0f);
+//        DrawCircle(bones[0], radius, 0, color);
+//
+//        // Connections como array estático
+//        static const std::pair<int, int> connections[] = {
+//            {0,1}, {1,2}, {2,3}, {3,4}, {4,5},  // Spine
+//            {1,6}, {6,7}, {7,8},   // Left arm
+//            {1,9}, {9,10}, {10,11}, // Right arm
+//            {5,12}, {12,13}, {13,14}, {14,15},  // Left leg
+//            {5,16}, {16,17}, {17,18}, {18,19}   // Right leg
+//        };
+//
+//        // Draw all lines
+//        for (const auto& [first, second] : connections) {
+//            DrawLine(bones[first], bones[second], color, 0, true);
+//        }
+//    }
+//    catch (...) {}
+//}

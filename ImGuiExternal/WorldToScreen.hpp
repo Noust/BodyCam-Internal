@@ -1,44 +1,44 @@
 #pragma once
 #include "include.h"
 
-fvector get_bone_3d(uintptr_t skeletal_mesh, int bone_index)
-{
-	DWORD64 bonearray;
-	DWORD64 bonearray2;
+//fvector get_bone_3d(uintptr_t skeletal_mesh, int bone_index)
+//{
+//	DWORD64 bonearray;
+//	DWORD64 bonearray2;
+//
+//	if (!read<DWORD64>(skeletal_mesh + offset::bone_array, bonearray) ||
+//		!read<DWORD64>(skeletal_mesh + offset::bone_array_2, bonearray2)) {
+//		return fvector(0, 0, 0);
+//	}
+//
+//	DWORD64 temp_bone_ptr = !bonearray ? bonearray2 : bonearray;
+//
+//	if (!temp_bone_ptr)
+//	{
+//		return fvector(0, 0, 0);
+//	}
+//
+//	FTransform bone = *(FTransform*)(temp_bone_ptr + (bone_index * offset::bone_stride));
+//
+//	FTransform ComponentToWorld = *(FTransform*)(skeletal_mesh + offset::component_to_world);
+//
+//	D3DMATRIX Matrix;
+//	Matrix = MatrixMultiplication(bone.ToMatrixWithScale(), ComponentToWorld.ToMatrixWithScale());
+//
+//	return fvector(Matrix._41, Matrix._42, Matrix._43);
+//}
 
-	if (!read<DWORD64>(skeletal_mesh + 0x610, bonearray) ||
-		!read<DWORD64>(skeletal_mesh + 0x620, bonearray2)) {
-		return fvector(0, 0, 0);
-	}
-
-	DWORD64 temp_bone_ptr = !bonearray ? bonearray2 : bonearray;
-
-	if (!temp_bone_ptr)
-	{
-		return fvector(0, 0, 0);
-	}
-
-	FTransform bone = *(FTransform*)(temp_bone_ptr + (bone_index * 0x60));
-
-	FTransform ComponentToWorld = *(FTransform*)(skeletal_mesh + 0x240);
-
-	D3DMATRIX Matrix;
-	Matrix = MatrixMultiplication(bone.ToMatrixWithScale(), ComponentToWorld.ToMatrixWithScale());
-
-	return fvector(Matrix._41, Matrix._42, Matrix._43);
-}
-
-bool is_visible(uintptr_t skeletal_mesh) {
-	float last_submit;
-	float last_render;
-
-	if (!read<float>(skeletal_mesh + 0x358, last_submit) ||
-		!read<float>(skeletal_mesh + 0x360, last_render)) {
-		return false;
-	}
-
-	return (bool)(last_render + 0.06f >= last_submit);
-}
+//bool is_visible(uintptr_t skeletal_mesh) {
+//	float last_submit;
+//	float last_render;
+//
+//	if (!read<float>(skeletal_mesh + offset::last_submit_time, last_submit) ||
+//		!read<float>(skeletal_mesh + offset::last_render_time, last_render)) {
+//		return false;
+//	}
+//
+//	return (bool)(last_render + 0.06f >= last_submit);
+//}
 
 inline fvector2d w2s(fvector WorldLocation) {
 
