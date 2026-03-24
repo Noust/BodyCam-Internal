@@ -1,44 +1,85 @@
 #pragma once
 #include "include.h"
 
-//fvector get_bone_3d(uintptr_t skeletal_mesh, int bone_index)
-//{
-//	DWORD64 bonearray;
-//	DWORD64 bonearray2;
-//
-//	if (!read<DWORD64>(skeletal_mesh + offset::bone_array, bonearray) ||
-//		!read<DWORD64>(skeletal_mesh + offset::bone_array_2, bonearray2)) {
-//		return fvector(0, 0, 0);
-//	}
-//
-//	DWORD64 temp_bone_ptr = !bonearray ? bonearray2 : bonearray;
-//
-//	if (!temp_bone_ptr)
-//	{
-//		return fvector(0, 0, 0);
-//	}
-//
-//	FTransform bone = *(FTransform*)(temp_bone_ptr + (bone_index * offset::bone_stride));
-//
-//	FTransform ComponentToWorld = *(FTransform*)(skeletal_mesh + offset::component_to_world);
-//
-//	D3DMATRIX Matrix;
-//	Matrix = MatrixMultiplication(bone.ToMatrixWithScale(), ComponentToWorld.ToMatrixWithScale());
-//
-//	return fvector(Matrix._41, Matrix._42, Matrix._43);
-//}
+static char g_boneDebug[256] = "waiting...";
 
-//bool is_visible(uintptr_t skeletal_mesh) {
-//	float last_submit;
-//	float last_render;
-//
-//	if (!read<float>(skeletal_mesh + offset::last_submit_time, last_submit) ||
-//		!read<float>(skeletal_mesh + offset::last_render_time, last_render)) {
-//		return false;
-//	}
-//
-//	return (bool)(last_render + 0.06f >= last_submit);
-//}
+static DWORD64 resolve_mesh_component(DWORD64 meshComp)
+{
+	DWORD64 leader = 0;
+	if (read<DWORD64>(meshComp + offset::leader_pose_component, leader) && leader != 0)
+		return leader;
+	return meshComp;
+}
+
+fvector get_bone_3d(uintptr_t pawn, int bone_index)
+{
+	DWORD64 meshComp = 0;
+	if (!read<DWORD64>(pawn + offset::skeletal_mesh_component, meshComp) || !meshComp) {
+		sprintf_s(g_boneDebug, "FAIL: no meshComp");
+		return fvector(0, 0, 0);
+	}
+
+	DWORD64 boneMesh = resolve_mesh_component(meshComp);
+
+	// Read active buffer index and try both double-buffer slots
+	DWORD64 boneDataPtr = 0;
+	int boneCount = 0;
+	int bufferUsed = -1;
+
+	int bufIdx = 0;
+	read<int>(boneMesh + offset::bone_buffer_index, bufIdx);
+	if (bufIdx < 0 || bufIdx > 1) bufIdx = 0;
+
+	for (int attempt = 0; attempt < 2; attempt++) {
+		int buf = (bufIdx + attempt) & 1;
+		DWORD64 arrOff = offset::active_bone_array + (buf * 0x10);
+		DWORD64 tmpPtr = 0; int tmpCount = 0;
+		if (read<DWORD64>(boneMesh + arrOff, tmpPtr) && tmpPtr != 0 &&
+			read<int>(boneMesh + arrOff + 0x8, tmpCount) && tmpCount > 0 &&
+			bone_index >= 0 && bone_index < tmpCount) {
+			boneDataPtr = tmpPtr;
+			boneCount = tmpCount;
+			bufferUsed = buf;
+			break;
+		}
+	}
+
+	// Fallback: CachedComponentSpaceTransforms
+	if (!boneDataPtr) {
+		DWORD64 tmpPtr = 0; int tmpCount = 0;
+		if (read<DWORD64>(boneMesh + offset::cached_bone_array, tmpPtr) && tmpPtr != 0 &&
+			read<int>(boneMesh + offset::cached_bone_array + 0x8, tmpCount) && tmpCount > 0 &&
+			bone_index >= 0 && bone_index < tmpCount) {
+			boneDataPtr = tmpPtr;
+			boneCount = tmpCount;
+			bufferUsed = 99;
+		}
+	}
+
+	if (!boneDataPtr) {
+		sprintf_s(g_boneDebug, "FAIL: no bone data (buf=%d)", bufIdx);
+		return fvector(0, 0, 0);
+	}
+
+	FTransform bone{};
+	if (!readRaw<FTransform>(boneDataPtr + (bone_index * offset::bone_stride), bone)) {
+		sprintf_s(g_boneDebug, "FAIL: bone read idx=%d", bone_index);
+		return fvector(0, 0, 0);
+	}
+
+	FTransform c2w{};
+	if (!readRaw<FTransform>(meshComp + offset::component_to_world, c2w)) {
+		sprintf_s(g_boneDebug, "FAIL: c2w read");
+		return fvector(0, 0, 0);
+	}
+
+	D3DMATRIX result = MatrixMultiplication(bone.ToMatrixWithScale(), c2w.ToMatrixWithScale());
+
+	sprintf_s(g_boneDebug, "OK buf=%d cnt=%d head(%.0f,%.0f,%.0f)",
+		bufferUsed, boneCount, bone.translation.x, bone.translation.y, bone.translation.z);
+
+	return fvector(result._41, result._42, result._43);
+}
 
 inline fvector2d w2s(fvector WorldLocation) {
 

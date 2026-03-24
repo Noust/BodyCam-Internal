@@ -296,6 +296,50 @@ D3DXMATRIX Matrix(fvector rot, fvector origin = fvector(0, 0, 0))
 	return matrix;
 }
 
+// FRotator struct matching UE5 memory layout (3 doubles: Pitch, Yaw, Roll)
+struct FRotator {
+	double Pitch;
+	double Yaw;
+	double Roll;
+};
+
+// Calcula el angulo de rotacion desde una posicion origen hacia una posicion destino
+// Retorna FRotator con Pitch y Yaw en grados, Roll siempre 0
+inline FRotator CalcAngle(fvector src, fvector dst) {
+	fvector delta = dst - src;
+	double hyp = sqrt(delta.x * delta.x + delta.y * delta.y);
+
+	FRotator angle;
+	angle.Pitch = atan2(delta.z, hyp) * (180.0 / M_PI);
+	angle.Yaw = atan2(delta.y, delta.x) * (180.0 / M_PI);
+	angle.Roll = 0.0;
+	return angle;
+}
+
+// Normaliza un angulo a rango [-180, 180]
+inline double NormalizeAngle(double angle) {
+	while (angle > 180.0) angle -= 360.0;
+	while (angle < -180.0) angle += 360.0;
+	return angle;
+}
+
+// Interpola suavemente entre la rotacion actual y la objetivo
+inline FRotator SmoothRotation(FRotator current, FRotator target, float smoothing) {
+	FRotator result;
+	result.Pitch = current.Pitch + NormalizeAngle(target.Pitch - current.Pitch) / smoothing;
+	result.Yaw = current.Yaw + NormalizeAngle(target.Yaw - current.Yaw) / smoothing;
+	result.Ro0;
+	return result;
+}
+
+// Calcula la distancia 2D en pantalla entre el crosshair y una posicion
+inline double GetCrosshairDistance(fvector2d screenPos, float screenW, float screenH) {
+	double cx = screenW / 2.0;
+	double cy = screenH / 2.0;
+	double dx = screenPos.x - cx;
+	double dy = screenPos.y - cy;
+	return sqrt(dx * dx + dy * dy);
+}
 
 
 

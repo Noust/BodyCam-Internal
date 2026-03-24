@@ -12,7 +12,7 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 std::string generateRandomString(int length) {
     const std::string characters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     std::string randomString;
-    std::srand(std::time(0));
+    std::srand(static_cast<unsigned>(std::time(0)));
     for (int i = 0; i < length; ++i) {
         randomString += characters[std::rand() % characters.length()];
     }
@@ -20,7 +20,7 @@ std::string generateRandomString(int length) {
 }
 
 int generateRandomInt(int min, int max) {
-    std::srand(std::time(0));
+    std::srand(static_cast<unsigned>(std::time(0)));
     return min + std::rand() % (max - min + 1);
 }
 

@@ -3,6 +3,12 @@ bool esp = false;
 bool team = false;
 bool showDebug = false;
 
+bool aimbot = false;
+bool aimTeam = false;
+float aimFov = 150.0f;
+float aimSmooth = 5.0f;
+int aimKey = VK_RBUTTON; // Right mouse button
+
 bool isInitialized = false;
 bool isMenuVisible = true;
 char cdistance[25];
@@ -179,6 +185,26 @@ void renderImGui() {
 				ImGui::EndTabItem();
 			}
 
+			if (ImGui::BeginTabItem("Aimbot")) {
+				ImGui::BeginChild("AimbotChild", ImVec2(windowSize.x - 16, windowSize.y - 40), true);
+
+				ImGui::Text("Aimbot Options");
+				ImGui::Separator();
+
+				ImGui::Checkbox("Enable Aimbot", &aimbot);
+				if (aimbot) {
+					ImGui::Indent(20);
+					ImGui::Checkbox("Ignore Team Members##aim", &aimTeam);
+					ImGui::SliderFloat("Aim FOV", &aimFov, 10.0f, 500.0f, "%.0f px");
+					ImGui::SliderFloat("Smoothing", &aimSmooth, 1.0f, 20.0f, "%.1f");
+					ImGui::Text("Aim Key: Right Mouse Button");
+					ImGui::Unindent(20);
+				}
+
+				ImGui::EndChild();
+				ImGui::EndTabItem();
+			}
+
 			ImGui::EndTabBar();
 		}
 
@@ -190,7 +216,6 @@ void renderImGui() {
 		static int totalPlayersDetected = 0;
 		static int playersShown = 0;
 		static int failedCurrentPlayerActor = 0;
-		static int failedSkeletalMesh = 0;
 		static int skippedSelfPlayer = 0;
 		static int failedSurvivorStatus = 0;
 		static int failedHealth = 0;
@@ -209,7 +234,6 @@ void renderImGui() {
 		totalPlayersDetected = 0;
 		playersShown = 0;
 		failedCurrentPlayerActor = 0;
-		failedSkeletalMesh = 0;
 		skippedSelfPlayer = 0; 
 		failedPlayerState = 0;
 		failedSurvivorStatus = 0;
@@ -248,14 +272,6 @@ void renderImGui() {
 							playerDebugInfo.push_back(std::string(playerInfo));
 							continue;
 						}
-
-						/*DWORD64 skeletalMesh;
-						if (!read<DWORD64>(currentPlayerActor + offset::skeletal_mesh, skeletalMesh)) {
-							failedSkeletalMesh++;
-							sprintf_s(playerInfo, sizeof(playerInfo), "Player %d: FAILED - No SkeletalMesh", i);
-							playerDebugInfo.push_back(std::string(playerInfo));
-							continue;
-						}*/
 
 						if (!adresses.acknowledged_pawn || currentPlayerActor == adresses.acknowledged_pawn) {
 							skippedSelfPlayer++;
@@ -305,59 +321,41 @@ void renderImGui() {
 							continue;
 						}
 
-						/*if (!skeletalMesh) {
-							failedSkeletalMesh++;
-							sprintf_s(playerInfo, sizeof(playerInfo), "Player %d: FAILED - Null SkeletalMesh", i);
-							playerDebugInfo.push_back(std::string(playerInfo));
-							continue;
-						}*/
+						// Obtener posiciones de huesos (head + root)
+						fvector headPos = get_bone_3d(currentPlayerActor, bone::head);
+						fvector basePos = get_bone_3d(currentPlayerActor, bone::Root);
+						bool usedBones = (headPos.x != 0 || headPos.y != 0 || headPos.z != 0);
 
-						/*fvector base = get_bone_3d(skeletalMesh, bone::Root);
-						fvector top = get_bone_3d(skeletalMesh, bone::Root);
-						top.z += 180;
-						if (base.x == 0 && base.y == 0 && base.z == 0) {
-							failedBonePosition++;
-							sprintf_s(playerInfo, sizeof(playerInfo), "Player %d: FAILED - Invalid Base Position", i);
-							playerDebugInfo.push_back(std::string(playerInfo));
-							continue;
-						}
-						if (top.x == 0 && top.y == 0 && top.z == 0) {
-							failedBonePosition++;
-							sprintf_s(playerInfo, sizeof(playerInfo), "Player %d: FAILED - Invalid Top Position", i);
-							playerDebugInfo.push_back(std::string(playerInfo));
-							continue;
-						}*/
-
-						DWORD64 rootComponent;
-						if (!read<DWORD64>(currentPlayerActor + offset::root_component, rootComponent)) {
-							failedBonePosition++;
-							sprintf_s(playerInfo, sizeof(playerInfo), "Player %d: FAILED - No Root Component", i);
-							playerDebugInfo.push_back(std::string(playerInfo));
-							continue;
-						}
-
-						fvector base(0, 0, 0);
-						if (!readRaw<fvector>(rootComponent + offset::relative_location, base)) {
-							failedBonePosition++;
-							sprintf_s(playerInfo, sizeof(playerInfo), "Player %d: FAILED - Invalid Base Position", i);
-							playerDebugInfo.push_back(std::string(playerInfo));
-							continue;
-						}
-						if (base.x == 0 && base.y == 0 && base.z == 0) {
-							failedBonePosition++;
-							sprintf_s(playerInfo, sizeof(playerInfo), "Player %d: FAILED - Invalid Base Position", i);
-							playerDebugInfo.push_back(std::string(playerInfo));
-							continue;
+						// Fallback a rootComponent si los huesos fallan
+						if (!usedBones) {
+							DWORD64 rootComponent;
+							if (!read<DWORD64>(currentPlayerActor + offset::root_component, rootComponent)) {
+								failedBonePosition++;
+								sprintf_s(playerInfo, sizeof(playerInfo), "Player %d: FAILED - No Root Component", i);
+								playerDebugInfo.push_back(std::string(playerInfo));
+								continue;
+							}
+							if (!readRaw<fvector>(rootComponent + offset::relative_location, basePos)) {
+								failedBonePosition++;
+								sprintf_s(playerInfo, sizeof(playerInfo), "Player %d: FAILED - Invalid Base Position", i);
+								playerDebugInfo.push_back(std::string(playerInfo));
+								continue;
+							}
+							if (basePos.x == 0 && basePos.y == 0 && basePos.z == 0) {
+								failedBonePosition++;
+								sprintf_s(playerInfo, sizeof(playerInfo), "Player %d: FAILED - Zero Base Position", i);
+								playerDebugInfo.push_back(std::string(playerInfo));
+								continue;
+							}
+							basePos.z -= 90;
+							headPos = basePos;
+							headPos.z += 180;
 						}
 
-						base.z -= 90;
-						fvector top = base;
-						top.z += 180;
+						fvector2d root = w2s(basePos);
+						fvector2d head = w2s(headPos);
 
-						fvector2d root = w2s(base);
-						fvector2d head = w2s(top);
-
-						float distance = POV.Location.distance(base) / 100;
+						float distance = POV.Location.distance(basePos) / 100;
 
 						if (distance > distancelimit) {
 							skippedDistance++;
@@ -380,7 +378,7 @@ void renderImGui() {
 
 						if (root.x > 0 && root.y > 0 && root.x < widthscreen && root.y < heightscreen) {
 							playersShown++;
-							sprintf_s(playerInfo, sizeof(playerInfo), "Player %d: SHOWN - HP:%.1f Dist:%.1fm Team:%d", i, health, distance, teamIndex);
+							sprintf_s(playerInfo, sizeof(playerInfo), "Player %d: SHOWN - HP:%.1f Dist:%.1fm Team:%d %s", i, health, distance, teamIndex, usedBones ? "(bones)" : "(fallback)");
 							playerDebugInfo.push_back(std::string(playerInfo));
 
 							float textSpacing = 15.0f;
@@ -403,7 +401,6 @@ void renderImGui() {
 							DrawT(healthPos, chealth, 1, playerColor);
 							DrawT(distancePos, cdistance, 1, playerColor);
 
-							//DrawBones(skeletalMesh, is_visible(skeletalMesh), POV);
 							drawbox(root, (root.y - head.y), (root.y - head.y) / 4, playerColor, 0);
 						}
 						else {
@@ -443,6 +440,15 @@ void renderImGui() {
 			DrawT(debugPos, debugLine, 1, ImColor(0, 200, 255));
 			debugPos.y += lineSpacing + 3;
 
+			// Bone debug info
+			DrawT(debugPos, "=== BONE DEBUG ===", 1, ImColor(255, 255, 0));
+			debugPos.y += lineSpacing;
+			DrawT(debugPos, g_boneDebug, 1, ImColor(255, 128, 0));
+			debugPos.y += lineSpacing;
+			sprintf_s(debugLine, sizeof(debugLine), "sizeof(FTransform)=%d bone_stride=0x%X", (int)sizeof(FTransform), offset::bone_stride);
+			DrawT(debugPos, debugLine, 1, ImColor(255, 128, 0));
+			debugPos.y += lineSpacing + 3;
+
 			// Individual player information
 			for (size_t i = 0; i < playerDebugInfo.size() && i < 15; ++i) { // Limit to 15 players to avoid screen overflow
 				ImColor color;
@@ -465,6 +471,158 @@ void renderImGui() {
 			}
 		}
 	}
+
+	// === AIMBOT LOGIC ===
+	// Log: buffer con el estado del ultimo tick del aimbot (visible en pantalla si showDebug)
+	static char aimLog[256] = "Aimbot: idle";
+
+	if (aimbot && GetAsyncKeyState(aimKey) & 0x8000) {
+		if (!ReadValues()) {
+			sprintf_s(aimLog, sizeof(aimLog), "Aimbot ERROR: ReadValues() failed (UWorld/chain roto)");
+		} else {
+			double healthL = 0.0;
+			if (!read<double>(adresses.survivor_status + offset::health, healthL)) {
+				sprintf_s(aimLog, sizeof(aimLog), "Aimbot ERROR: read LocalPlayer health failed (survivor_status=0x%llX)", adresses.survivor_status);
+			} else if (healthL <= 1) {
+				sprintf_s(aimLog, sizeof(aimLog), "Aimbot SKIP: jugador local muerto (health=%.1f)", healthL);
+			} else {
+				int numP = 0;
+				if (!read<int>(adresses.game_state + (offset::player_array + sizeof(uintptr_t)), numP)) {
+					sprintf_s(aimLog, sizeof(aimLog), "Aimbot ERROR: read numPlayers failed (game_state=0x%llX)", adresses.game_state);
+				} else {
+					int ackteamid = *(int*)(adresses.acknowledged_pawn + offset::team_index_pawn);
+					readRaw<FMinimalViewInfo>(adresses.camera_manager + offset::pov_info, POV);
+
+					double bestDist = aimFov;
+					fvector bestTarget(0, 0, 0);
+					bool foundTarget = false;
+
+					int skipTeam = 0, skipDead = 0, skipOffscreen = 0, skipReadFail = 0;
+
+					for (int i = 0; i < numP; ++i) {
+						DWORD64 currentPlayerActor;
+						if (!read<DWORD64>((adresses.player_array + offset::player_array_data) + (i * offset::player_array_stride), currentPlayerActor)) {
+							skipReadFail++;
+							continue;
+						}
+
+						if (!adresses.acknowledged_pawn || currentPlayerActor == adresses.acknowledged_pawn)
+							continue;
+
+						DWORD64 survivorStatus;
+						if (!read<DWORD64>(currentPlayerActor + offset::SurvivorStatus, survivorStatus)) {
+							skipReadFail++;
+							continue;
+						}
+
+						double health;
+						if (!read<double>(survivorStatus + offset::health, health)) {
+							skipReadFail++;
+							continue;
+						}
+						if (health <= 1) {
+							skipDead++;
+							continue;
+						}
+
+						int teamIndex = *(int*)(currentPlayerActor + offset::team_index_pawn);
+						if (aimTeam && teamIndex == ackteamid) {
+							skipTeam++;
+							continue;
+						}
+
+						DWORD64 rootComponent;
+						if (!read<DWORD64>(currentPlayerActor + offset::root_component, rootComponent)) {
+							skipReadFail++;
+							continue;
+						}
+
+						// Intentar obtener posicion del head bone para apuntar
+						fvector targetPos = get_bone_3d(currentPlayerActor, bone::head);
+
+						// Fallback a rootComponent si el hueso falla
+						if (targetPos.x == 0 && targetPos.y == 0 && targetPos.z == 0) {
+							if (!readRaw<fvector>(rootComponent + offset::relative_location, targetPos)) {
+								skipReadFail++;
+								continue;
+							}
+							if (targetPos.x == 0 && targetPos.y == 0 && targetPos.z == 0) {
+								skipReadFail++;
+								continue;
+							}
+							// Apuntar a la altura de la cabeza (aprox -30 desde centro)
+							targetPos.z -= 30.0;
+						}
+
+						fvector2d screenPos = w2s(targetPos);
+						if (screenPos.x <= 0 || screenPos.y <= 0 || screenPos.x >= widthscreen || screenPos.y >= heightscreen) {
+							skipOffscreen++;
+							continue;
+						}
+
+						double dist = GetCrosshairDistance(screenPos, widthscreen, heightscreen);
+						if (dist < bestDist) {
+							bestDist = dist;
+							bestTarget = targetPos;
+							foundTarget = true;
+						}
+					}
+
+					if (!foundTarget) {
+						sprintf_s(aimLog, sizeof(aimLog),
+							"Aimbot: sin objetivo | total=%d muertos=%d equipo=%d pantalla=%d lecturaFail=%d fov=%.0f",
+							numP, skipDead, skipTeam, skipOffscreen, skipReadFail, aimFov);
+					} else {
+						FRotator targetAngle = CalcAngle(POV.Location, bestTarget);
+
+						// Leer rotacion actual
+						FRotator currentRot{};
+						if (!readRaw<FRotator>(adresses.player_controller + offset::control_rotation, currentRot)) {
+							sprintf_s(aimLog, sizeof(aimLog),
+								"Aimbot ERROR: readRaw ControlRotation fallo (PC=0x%llX off=0x%X)",
+								adresses.player_controller, (unsigned)offset::control_rotation);
+						} else {
+							FRotator smoothed = SmoothRotation(currentRot, targetAngle, aimSmooth);
+
+							bool wP = write<double>(adresses.player_controller + offset::control_rotation + 0x00, smoothed.Pitch);
+							bool wY = write<double>(adresses.player_controller + offset::control_rotation + 0x08, smoothed.Yaw);
+							bool wR = write<double>(adresses.player_controller + offset::control_rotation + 0x10, smoothed.Roll);
+
+							if (!wP || !wY || !wR) {
+								sprintf_s(aimLog, sizeof(aimLog),
+									"Aimbot ERROR: write ControlRotation fallo (P=%d Y=%d R=%d) addr=0x%llX",
+									(int)wP, (int)wY, (int)wR,
+									adresses.player_controller + offset::control_rotation);
+							} else {
+								sprintf_s(aimLog, sizeof(aimLog),
+									"Aimbot OK: P=%.2f Y=%.2f dist=%.0fpx target=(%.0f,%.0f,%.0f)",
+									smoothed.Pitch, smoothed.Yaw, bestDist,
+									bestTarget.x, bestTarget.y, bestTarget.z);
+							}
+						}
+					}
+				}
+			}
+		}
+	} else if (aimbot) {
+		sprintf_s(aimLog, sizeof(aimLog), "Aimbot: listo (mantener RMB para activar)");
+	}
+
+	// Mostrar log del aimbot en pantalla si showDebug esta activo
+	if (showDebug && aimbot) {
+		fvector2d logPos = { 160.0, (double)heightscreen - 30.0 };
+		ImColor logColor = (strstr(aimLog, "ERROR") != nullptr) ? ImColor(255, 60, 60)
+		                 : (strstr(aimLog, "OK")    != nullptr) ? ImColor(60, 255, 60)
+		                 :                                        ImColor(255, 200, 0);
+		DrawT(logPos, aimLog, 1, logColor);
+	}
+
+	// Dibujar circulo de FOV del aimbot
+	if (aimbot) {
+		fvector2d center(widthscreen / 2.0, heightscreen / 2.0);
+		DrawCircle(center, (int)aimFov, 1, ImColor(255, 255, 255, 100));
+	}
+
 	ImGui::EndFrame();
 
 	pDevice->Clear(0, NULL, D3DCLEAR_TARGET, D3DCOLOR_ARGB(0, 0, 0, 0), 1.0f, 0);
