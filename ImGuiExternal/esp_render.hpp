@@ -3,23 +3,12 @@
 #include <ImGui/imgui.h>
 #include <algorithm>
 
-/* ---------------------------------------------------------------------------
- *  Primitivas de dibujado del ESP.
- *
- *  Aqui vive el COMO se ve; Source.cpp decide QUE se dibuja. No mezclar.
- *
- *  Todo se pinta con doble trazo: primero en negro y mas grueso, luego en su
- *  color. Es lo que hace que se lea igual de bien sobre nieve que sobre asfalto.
- *
- *  Se usa el BackgroundDrawList para que el menu quede POR ENCIMA del ESP.
- * ------------------------------------------------------------------------- */
-
 namespace Render {
 
 	struct DrawStyle {
 		float lineThickness = 1.0f;
 		float textScale = 1.0f;
-		float outlineExtra = 2.0f;   /* cuanto mas gruesa es la pasada negra */
+		float outlineExtra = 2.0f;
 		bool  outline = true;
 	};
 	inline DrawStyle g_Style;
@@ -38,8 +27,6 @@ namespace Render {
 		return f->CalcTextSizeA(FontSize(), FLT_MAX, 0.0f, txt);
 	}
 
-	/* Texto con contorno negro en las 4 direcciones. `centered` lo centra en X
-	 * sobre pos, que es lo que se quiere encima de un jugador. */
 	inline void Text(const ImVec2& pos, const char* txt, ImU32 col, bool centered = true) {
 		if (!txt || !*txt) return;
 		ImDrawList* dl = List();
@@ -77,7 +64,6 @@ namespace Render {
 		dl->AddRect(tl, br, col, 0.0f, 0, t);
 	}
 
-	/* Caja de esquinas: mas discreta y estorba menos la vista que la caja entera. */
 	inline void CornerBox(const ImVec2& tl, const ImVec2& br, ImU32 col, float thick = -1.0f) {
 		const float w = br.x - tl.x, h = br.y - tl.y;
 		if (w <= 0.0f || h <= 0.0f) return;
@@ -110,8 +96,6 @@ namespace Render {
 		dl->AddCircleFilled(c, r, col);
 	}
 
-	/* Verde -> verde oscuro -> naranja -> rojo. Cuatro tramos se leen de un
-	 * vistazo mucho mejor que un degradado continuo. */
 	inline ImU32 HealthColor(float pct) {
 		if (pct > 75.0f) return IM_COL32(0, 255, 0, 255);
 		if (pct > 50.0f) return IM_COL32(80, 190, 0, 255);
@@ -119,7 +103,6 @@ namespace Render {
 		return IM_COL32(255, 40, 40, 255);
 	}
 
-	/* Barra vertical pegada al lado izquierdo de la caja. */
 	inline void HealthBar(const ImVec2& tl, const ImVec2& br, float pct) {
 		ImDrawList* dl = List();
 		if (!dl) return;
@@ -130,7 +113,6 @@ namespace Render {
 		const float h = br.y - tl.y;
 		if (h <= 1.0f) return;
 
-		/* Carril negro completo, para que se vea cuanta vida falta. */
 		dl->AddRectFilled(ImVec2(x - 1, tl.y - 1), ImVec2(x + w + 1, br.y + 1), kOutline);
 
 		const float fill = h * (pct / 100.0f);
@@ -141,7 +123,6 @@ namespace Render {
 		Line(from, to, col);
 	}
 
-	/* Tema del menu. */
 	inline void ApplyTheme() {
 		ImGuiStyle& s = ImGui::GetStyle();
 		s.WindowPadding = ImVec2(11, 12);
@@ -214,4 +195,4 @@ namespace Render {
 		c[ImGuiCol_ModalWindowDimBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.35f);
 	}
 
-} // namespace Render
+}

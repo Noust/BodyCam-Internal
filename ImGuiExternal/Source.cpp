@@ -5,15 +5,6 @@
 #include <cstring>
 #include <new>
 
-/* ===========================================================================
- *  NOVA - Bodycam
- *
- *  DLL inyectada: overlay D3D9 + ImGui propio, lectura in-process.
- *  Offsets en HookFunc.h; evidencia de cada uno en context/REVERSE_ENGINEERING.md.
- * ======================================================================== */
-
-/* ------------------------------- CONFIG -------------------------------- */
-
 enum BoxMode : int { BOX_NONE = 0, BOX_FULL = 1, BOX_CORNERS = 2 };
 
 struct EspConfig {
@@ -21,7 +12,7 @@ struct EspConfig {
 
 	struct Players {
 		int   boxMode = BOX_FULL;
-		bool  boxFromBones = true;   /* caja ajustada a la pose real       */
+		bool  boxFromBones = true;
 		float boxScale = 1.0f;
 		bool  name = true;
 		bool  health = true;
@@ -32,9 +23,9 @@ struct EspConfig {
 		bool  snapline = false;
 		bool  showEnemy = true;
 		bool  showTeam = false;
-		bool  showDrones = true;      /* al morir se pasa a controlar un dron */
+		bool  showDrones = true;
 		bool  hideDead = true;
-		float maxDistance = 300.0f;   /* metros */
+		float maxDistance = 300.0f;
 	} players;
 
 	struct Aim {
@@ -42,29 +33,25 @@ struct EspConfig {
 		bool  ignoreTeam = true;
 		float fov = 150.0f;
 		float smooth = 5.0f;
-		int   method = 0;          /* 0 = AddYaw/PitchInput (funcion del juego) */
-		int   boneMode = 0;        /* 0 = cabeza, 1 = cuerpo                    */
-		float maxStep = 25.0f;     /* tope de grados por frame                  */
+		int   method = 0;
+		int   boneMode = 0;
+		float maxStep = 25.0f;
 		bool  drawFov = true;
 		bool  drawTarget = false;
 
-		/* Soft aim: en vez de mantener un boton, corrige en el instante del
-		 * disparo. Ver la nota en RunAimbot sobre lo que esto SI y NO hace. */
 		bool  softAim = false;
 		float softFov = 120.0f;
-		float softSmooth = 1.0f;   /* 1 = corregir todo el error de golpe */
+		float softSmooth = 1.0f;
 		bool  softHeadOnly = true;
 	} aim;
 } g_Cfg;
 
 enum AimMethod : int {
-	AIM_GAME_FUNCTION = 0,   /* AddYawInput / AddPitchInput  <- recomendado */
-	AIM_ROTATION_INPUT = 1,  /* escritura directa en RotationInput          */
-	AIM_CONTROL_ROTATION = 2 /* escritura directa en ControlRotation (viejo)*/
+	AIM_GAME_FUNCTION = 0,
+	AIM_ROTATION_INPUT = 1,
+	AIM_CONTROL_ROTATION = 2
 };
 
-/* Diagnostico del ESP: cada motivo de descarte por separado. Un contador
- * global de "no se ve nada" no permite arreglar nada. */
 struct EspDiag {
 	int total = 0, drawn = 0;
 	int noPawn = 0, self = 0, noHealth = 0, dead = 0, teamFiltered = 0;
@@ -84,8 +71,6 @@ static int   g_UiShown = 0;
 static char  g_AimLog[256] = "Aimbot: idle";
 static int   g_AimKey = VK_RBUTTON;
 
-/* ------------------------- VENTANA / DIRECTX --------------------------- */
-
 struct WindowInfo { int Width, Height, Left, Right, Top, Bottom; };
 
 static WindowInfo* windowInfo = nullptr;
@@ -100,11 +85,8 @@ static IDirect3DDevice9Ex* pDevice = nullptr;
 static IDirect3D9Ex* pDirect = nullptr;
 static D3DPRESENT_PARAMETERS gD3DPresentParams = { NULL };
 
-/* ------------------------------ UI HELPERS ----------------------------- */
-
 static constexpr float UI_LABEL_W = 170.0f;
 
-/* Filtro del buscador. Devuelve true si la opcion debe mostrarse. */
 static bool UiPass(const char* label) {
 	if (g_UiFilter[0] == '\0') { g_UiShown++; return true; }
 	char a[128], b[128];
@@ -117,8 +99,6 @@ static bool UiPass(const char* label) {
 	return false;
 }
 
-/* El "(?)" va pegado a la etiqueta, nunca despues del control: los controles
- * usan ancho -1 y cualquier cosa a su derecha se sale del panel. */
 static void UiHelp(const char* help) {
 	if (!help || !*help) return;
 	ImGui::SameLine(0.0f, 4.0f);
@@ -181,12 +161,6 @@ static void UiGroup(const char* title) {
 	ImGui::Dummy(ImVec2(0, 2));
 }
 
-/* ------------------------------- ESP ----------------------------------- */
-
-/* Caja a partir de la capsula de colision. Es el camino de respaldo y el que
- * se usa cuando la pose no esta disponible.
- * La capsula ENCOGE al agacharse o tumbarse, asi que hay que releerla cada
- * frame: es lo que hace que la caja siga la postura. */
 static bool BoxFromCapsule(uintptr_t pawn, ImVec2& tl, ImVec2& br, fvector& rootOut,
                            bool hasCapsule = true) {
 	uintptr_t root = 0;
@@ -196,11 +170,6 @@ static bool BoxFromCapsule(uintptr_t pawn, ImVec2& tl, ImVec2& br, fvector& root
 	if (!readRaw<fvector>(root + offset::c2w_translation, pos)) return false;
 	rootOut = pos;
 
-	/* HalfHeight y Radius son adyacentes: una sola lectura de 8 bytes.
-	 *
-	 * Solo se leen si el pawn es un ACharacter. Un dron deriva de APawn, donde
-	 * el offset 0x338 NO es la capsula sino otra cosa: leerlo ahi daria valores
-	 * sin sentido. Para esos se usa un tamano fijo pequeno. */
 	float cap[2] = { 88.0f, 34.0f };
 	if (hasCapsule) {
 		uintptr_t capsule = 0;
@@ -208,7 +177,7 @@ static bool BoxFromCapsule(uintptr_t pawn, ImVec2& tl, ImVec2& br, fvector& root
 			readBytes(capsule + offset::capsule_half_height, cap, sizeof(cap));
 	}
 	else {
-		cap[0] = 30.0f; cap[1] = 30.0f;   /* dron: caja compacta y cuadrada */
+		cap[0] = 30.0f; cap[1] = 30.0f;
 	}
 
 	float halfH = cap[0], radius = cap[1];
@@ -232,18 +201,9 @@ static bool BoxFromCapsule(uintptr_t pawn, ImVec2& tl, ImVec2& br, fvector& root
 	return true;
 }
 
-/* Caja ajustada a la pose real: bounding box de todos los huesos proyectados.
- * Se exige un minimo de huesos visibles; si el jugador esta medio detras de la
- * camara la caja saldria deformada y es mejor caer a la capsula. */
 static bool BoxFromPose(const PawnPose& pose, ImVec2& tl, ImVec2& br) {
 	if (!pose.ok || pose.count < 4) return false;
 
-	/* Solo se toma el rango VERTICAL de la pose, y el centro horizontal.
-	 *
-	 * Antes se usaba el bounding box completo, y el ancho bailaba cada vez que
-	 * el enemigo movía los brazos al correr. La altura sí interesa (es lo que
-	 * hace que la caja siga al agacharse), pero el ancho se deriva de ella con
-	 * una proporción humana fija, así que se queda quieto. */
 	float minY = FLT_MAX, maxY = -FLT_MAX;
 	double sumX = 0.0;
 	int visible = 0;
@@ -264,7 +224,6 @@ static bool BoxFromPose(const PawnPose& pose, ImVec2& tl, ImVec2& br) {
 	const float padY = h * 0.05f;
 	const float top = minY - padY;
 	const float bot = maxY + padY;
-	/* Proporción humana en pantalla: alto / ancho ≈ 2.6 */
 	const float w = (bot - top) / 2.6f;
 
 	tl = ImVec2(cx - w * 0.5f, top);
@@ -280,17 +239,6 @@ static void ScaleBox(ImVec2& tl, ImVec2& br, float scale) {
 	br = ImVec2(cx + hw, cy + hh);
 }
 
-/* ---------------------------------------------------------------------------
- *  Tipo de pawn
- *
- *  Al morir, el jugador pasa a controlar un dron (y tambien puede sacar uno
- *  estando vivo), asi que el pawn del PlayerState deja de ser un personaje.
- *  Por eso NO desaparecen al morir: siguen siendo entidades validas.
- *
- *  Se distingue por el nombre de la clase, resuelto con GNames. El resultado se
- *  cachea POR UClass, nunca por objeto: la clase es la misma para todos los
- *  drones y no cambia, asi que se resuelve una vez por tipo.
- * ------------------------------------------------------------------------- */
 enum PawnKind : int { PK_UNKNOWN = 0, PK_PLAYER = 1, PK_DRONE = 2 };
 
 static std::unordered_map<uintptr_t, int> g_ClassKind;
@@ -309,23 +257,12 @@ static int ClassifyPawn(uintptr_t pawn) {
 			kind = PK_DRONE;
 		else if (Names::ContainsCI(name, "character") || Names::ContainsCI(name, "pawn"))
 			kind = PK_PLAYER;
-		/* Solo se cachea cuando se pudo leer el nombre: si GNames aun no estaba
-		 * listo, hay que poder reintentar en el siguiente frame. */
 		if (g_ClassKind.size() > 256) g_ClassKind.clear();
 		g_ClassKind[cls] = kind;
 	}
 	return kind;
 }
 
-/* Esqueleto.
- *
- * Se dibujan SOLO los huesos del cuerpo, identificados por su nombre real en el
- * FReferenceSkeleton. Dibujar los ~150 huesos del modelo daba una maraña: los
- * dedos amontonan líneas en las manos y los huesos de anclaje del arma salen
- * disparados lejos del personaje.
- *
- * `drawParent` ya salta los huesos descartados, así que la cadena no se rompe
- * aunque entre dos huesos del cuerpo haya twists o correctivos por medio. */
 static void DrawSkeleton(const PawnPose& pose, const SkeletonInfo* skel, ImU32 col) {
 	if (!skel || !skel->valid) return;
 	const int n = (std::min)(pose.count, (int)skel->parents.size());
@@ -346,10 +283,7 @@ static void DrawSkeleton(const PawnPose& pose, const SkeletonInfo* skel, ImU32 c
 		}
 	}
 	else {
-		/* Respaldo si no se pudieron leer los nombres: se dibuja hueso->padre,
-		 * pero descartando los segmentos absurdamente largos, que son los que
-		 * producen las líneas disparadas hacia fuera del cuerpo. */
-		const double maxLen = 60.0;   /* cm; ningún hueso del cuerpo mide más */
+		const double maxLen = 60.0;
 		for (int i = 1; i < n; ++i) {
 			const int p = skel->parents[i];
 			if (p < 0 || p >= n) continue;
@@ -383,7 +317,6 @@ static void RenderESP() {
 	const float maxDistCm = g_Cfg.players.maxDistance * 100.0f;
 
 	for (int i = 0; i < count; ++i) {
-		/* PlayerArray es TArray<APlayerState*>: stride 8, Data en +0. */
 		uintptr_t ps = 0;
 		if (!readPtr(data + (uintptr_t)i * offset::player_array_stride, ps)) { g_Diag.noPawn++; continue; }
 
@@ -392,10 +325,6 @@ static void RenderESP() {
 
 		if (adresses.acknowledged_pawn && pawn == adresses.acknowledged_pawn) { g_Diag.self++; continue; }
 
-		/* Ojo: read<T> pone el destino a CERO si falla, no deja el valor previo.
-		 * Sin comprobar el retorno, un fallo de lectura daria teamId = 0, que es
-		 * un equipo valido: un enemigo podria quedar marcado como aliado y
-		 * ocultarse. Ante la duda, equipo desconocido (-1) = tratar como enemigo. */
 		int teamId = -1;
 		if (!read<int>(ps + offset::ps_team_id, teamId)) teamId = -1;
 		const bool sameTeam = (adresses.local_team >= 0 && teamId >= 0 && teamId == adresses.local_team);
@@ -406,8 +335,6 @@ static void RenderESP() {
 		const int kind = ClassifyPawn(pawn);
 		const bool isDrone = (kind == PK_DRONE);
 
-		/* La vida vive en ABodycamCharacter+0x668. Un dron no es un Character,
-		 * asi que ese offset cae fuera de su clase: no se lee. */
 		float health = 0.0f, maxHealth = 100.0f;
 		const bool gotHealth = !isDrone && ReadHealth(pawn, health, maxHealth);
 		if (!gotHealth && !isDrone) g_Diag.noHealth++;
@@ -416,9 +343,6 @@ static void RenderESP() {
 		if (isDrone) g_Diag.drones++;
 		if (isDrone && !g_Cfg.players.showDrones) { g_Diag.droneFiltered++; continue; }
 
-		/* Pose (para esqueleto, caja ajustada y punto de cabeza).
-		 * En un dron no hay esqueleto humano, asi que la caja sale de la
-		 * capsula: ajustarla a "la pose" de un dron da formas raras. */
 		PawnPose pose;
 		const bool hasPose = !isDrone && ReadPawnPose(pawn, pose);
 
@@ -433,8 +357,6 @@ static void RenderESP() {
 
 		if (!haveBox) { g_Diag.noPosition++; continue; }
 
-		/* Referencia para la distancia: el hueso raiz si hay pose (siempre esta
-		 * en los pies del modelo), y si no el centro de la capsula. */
 		const fvector refPos = (hasPose && pose.count > 0) ? pose.world[0] : rootPos;
 		double distCm = g_View.Location.distance(refPos);
 		if (distCm <= 0.0 || distCm > 1e7) distCm = 0.0;
@@ -443,7 +365,6 @@ static void RenderESP() {
 
 		ScaleBox(tl, br, g_Cfg.players.boxScale);
 
-		/* Si la caja entera queda fuera de pantalla, no hay nada que pintar. */
 		if (br.x < 0 || br.y < 0 || tl.x > widthscreen || tl.y > heightscreen) {
 			g_Diag.offScreen++;
 			continue;
@@ -461,8 +382,6 @@ static void RenderESP() {
 		if (g_Cfg.players.snapline)
 			Render::Snapline(ImVec2(widthscreen * 0.5f, heightscreen), ImVec2((tl.x + br.x) * 0.5f, br.y), col);
 
-		/* Un solo lookup del esqueleto por jugador; lo usan el esqueleto y el
-		 * punto de cabeza. */
 		const SkeletonInfo* skel = nullptr;
 		if (hasPose && (g_Cfg.players.skeleton || g_Cfg.players.headDot))
 			skel = GetSkeletonForPawn(pawn);
@@ -470,7 +389,6 @@ static void RenderESP() {
 		if (g_Cfg.players.skeleton && hasPose)
 			DrawSkeleton(pose, skel, col);
 
-		/* Textos: nombre encima, vida y distancia debajo. */
 		float ty = tl.y - Render::FontSize() - 2.0f;
 		const float cx = (tl.x + br.x) * 0.5f;
 
@@ -481,7 +399,6 @@ static void RenderESP() {
 				ty -= Render::FontSize() + 1.0f;
 			}
 		}
-		/* Etiqueta de dron encima del nombre, en su propio color. */
 		if (isDrone) {
 			Render::Text(ImVec2(cx, ty), "[DRONE]", IM_COL32(0, 220, 255, 255));
 			ty -= Render::FontSize() + 1.0f;
@@ -508,30 +425,9 @@ static void RenderESP() {
 	}
 }
 
-/* ------------------------------ AIMBOT --------------------------------- */
-
-/* Objetivo del ultimo tick, para poder dibujarlo. */
 static bool    g_AimHasTarget = false;
 static fvector g_AimTargetWorld;
 
-/* ---------------------------------------------------------------------------
- *  SOFT AIM — que hace exactamente, y que NO hace
- *
- *  Lo que hace: cuando disparas, y solo en ese instante, corrige la punteria
- *  hacia la cabeza del enemigo mas cercano al centro dentro de su FOV. La
- *  correccion se aplica de golpe (softSmooth = 1) por la misma via verificada
- *  que el aimbot: RotationInput, a traves de AddYawInput/AddPitchInput.
- *
- *  Lo que NO hace: redirigir la bala sin mover la vista. Eso exigiria
- *  interceptar el calculo de direccion del disparo dentro del juego, o sea un
- *  hook con trampolin sobre la funcion de trace. Esa funcion no esta
- *  identificada en este binario, y el `hookclass::Hook` que trae el proyecto
- *  sobrescribe la funcion original sin conservarla, asi que no serviria.
- *  Montarlo requiere analisis nuevo y un motor de hooks de verdad.
- *
- *  Consecuencia practica: aqui la mira SI se mueve, aunque sea durante un solo
- *  frame en el momento del disparo.
- * ------------------------------------------------------------------------- */
 static void RunAimbot() {
 	g_AimHasTarget = false;
 
@@ -548,8 +444,6 @@ static void RunAimbot() {
 		return;
 	}
 
-	/* El soft aim manda cuando esta disparando: corrige de golpe y con su
-	 * propio FOV, que suele ser mas cerrado que el del aimbot. */
 	const bool useSoft = softActive;
 	const double activeFov = useSoft ? (double)g_Cfg.aim.softFov : (double)g_Cfg.aim.fov;
 	const double activeSmooth = useSoft
@@ -577,16 +471,11 @@ static void RunAimbot() {
 		if (!readPtr(ps + offset::ps_pawn, pawn)) { skipRead++; continue; }
 		if (pawn == adresses.acknowledged_pawn) continue;
 
-		/* Mismo cuidado que en el ESP: si la lectura falla, teamId queda a 0 y un
-		 * enemigo podria pasar por aliado (y el aimbot lo ignoraria). */
 		int teamId = -1;
 		if (!read<int>(ps + offset::ps_team_id, teamId)) teamId = -1;
 		if (g_Cfg.aim.ignoreTeam && adresses.local_team >= 0 && teamId >= 0 &&
 		    teamId == adresses.local_team) { skipTeam++; continue; }
 
-		/* Un dron no es un ACharacter: ni su vida ni su malla estan donde las de
-		 * un jugador. Leerle la pose daria posiciones inventadas y el aimbot
-		 * apuntaria a la nada, asi que se descarta como objetivo. */
 		if (ClassifyPawn(pawn) == PK_DRONE) { skipDrone++; continue; }
 
 		float hp = 0.0f, maxHp = 100.0f;
@@ -595,9 +484,6 @@ static void RunAimbot() {
 		PawnPose pose;
 		if (!ReadPawnPose(pawn, pose)) { skipRead++; continue; }
 
-		/* Cabeza segun el esqueleto de referencia; si no se resuelve, el hueso
-		 * raiz. En modo "cuerpo" se apunta a la mitad de la altura del modelo,
-		 * que es mas estable que la raiz (que esta en los pies). */
 		const SkeletonInfo* sk = GetSkeletonForPawn(pawn);
 		fvector target;
 		if (activeBone == 0 && sk && sk->head >= 0 && sk->head < pose.count) {
@@ -626,9 +512,6 @@ static void RunAimbot() {
 	g_AimHasTarget = true;
 	g_AimTargetWorld = bestTarget;
 
-	/* Angulo que queremos, y el que tenemos ahora mismo. ControlRotation es la
-	 * rotacion REAL de la mira, asi que sirve como referencia aunque no la
-	 * escribamos. */
 	const FRotator want = CalcAngle(g_View.Location, bestTarget);
 	FRotator cur{};
 	if (!readRaw<FRotator>(adresses.player_controller + offset::control_rotation, cur)) {
@@ -642,9 +525,6 @@ static void RunAimbot() {
 	const double stepYaw = errYaw / smooth;
 	const double stepPitch = errPitch / smooth;
 
-	/* El soft aim tiene que poder cerrar todo el error en un frame, o la bala
-	 * sale antes de llegar. Se le levanta el tope, pero sin quitarlo: sigue
-	 * acotado al FOV en el que puede haber un objetivo. */
 	const double stepCap = useSoft ? 180.0 : (double)g_Cfg.aim.maxStep;
 
 	const uintptr_t pc = adresses.player_controller;
@@ -653,9 +533,6 @@ static void RunAimbot() {
 
 	switch (g_Cfg.aim.method) {
 	case AIM_GAME_FUNCTION:
-		/* Camino preferido: alimentar RotationInput con las propias funciones
-		 * del juego. Si la firma no valido (juego parcheado), se cae solo al
-		 * metodo directo en vez de quedarse sin hacer nada. */
 		applied = GameCalls::AddLookInput(pc, stepYaw, stepPitch, stepCap);
 		how = "AddYawInput/AddPitchInput";
 		if (!applied) {
@@ -671,9 +548,6 @@ static void RunAimbot() {
 
 	case AIM_CONTROL_ROTATION:
 	default: {
-		/* Metodo antiguo. Se conserva por si acaso, pero el juego recalcula
-		 * ControlRotation cada tick a partir de RotationInput, asi que este
-		 * camino pelea con el motor. */
 		const FRotator sm = SmoothRotation(cur, want, (float)smooth);
 		const bool okP = write<double>(pc + offset::control_rotation + 0x00, sm.Pitch);
 		const bool okY = write<double>(pc + offset::control_rotation + 0x08, sm.Yaw);
@@ -690,8 +564,6 @@ static void RunAimbot() {
 		          bestDist, stepYaw, stepPitch, how);
 }
 
-/* -------------------------------- MENU --------------------------------- */
-
 static const char* kSections[] = { "Players", "Aimbot", "Visuals", "Overlay", "Debug" };
 static constexpr int kSectionCount = (int)(sizeof(kSections) / sizeof(kSections[0]));
 
@@ -699,13 +571,11 @@ static void RenderMenu() {
 	ImGui::SetNextWindowSize(ImVec2(700, 460), ImGuiCond_FirstUseEver);
 	if (!ImGui::Begin("NOVA", nullptr, ImGuiWindowFlags_NoCollapse)) { ImGui::End(); return; }
 
-	/* Cabecera: buscador a la izquierda, interruptor maestro a la derecha. */
 	ImGui::SetNextItemWidth(240.0f);
 	ImGui::InputTextWithHint("##search", "Search options...", g_UiFilter, sizeof(g_UiFilter));
 	{
 		const bool on = g_Cfg.enabled;
 		const float bw = 130.0f;
-		/* Pegado al borde derecho de la ventana, siempre visible. */
 		ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - bw);
 		ImGui::PushStyleColor(ImGuiCol_Button, on ? ImVec4(0.10f, 0.55f, 0.25f, 1.0f) : ImVec4(0.45f, 0.12f, 0.12f, 1.0f));
 		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, on ? ImVec4(0.14f, 0.65f, 0.30f, 1.0f) : ImVec4(0.55f, 0.16f, 0.16f, 1.0f));
@@ -715,7 +585,6 @@ static void RenderMenu() {
 	}
 	ImGui::Separator();
 
-	/* Barra lateral. */
 	ImGui::BeginChild("##nav", ImVec2(140, 0), true);
 	for (int i = 0; i < kSectionCount; ++i) {
 		if (ImGui::Selectable(kSections[i], g_MenuSection == i, 0, ImVec2(0, 24)))
@@ -728,7 +597,7 @@ static void RenderMenu() {
 
 	g_UiShown = 0;
 
-	if (g_MenuSection == 0) {          /* ---------------- Players -------- */
+	if (g_MenuSection == 0) {
 		UiGroup("Box");
 		UiCombo("Bounding Box", &g_Cfg.players.boxMode, "None\0Full\0Corners\0",
 		        "Shape drawn around each player.");
@@ -770,7 +639,7 @@ static void RenderMenu() {
 		         "are still shown, so a broken offset does not hide everyone.");
 		UiSlider("Max Distance", &g_Cfg.players.maxDistance, 10.0f, 1000.0f, "%.0f m");
 	}
-	else if (g_MenuSection == 1) {     /* ---------------- Aimbot --------- */
+	else if (g_MenuSection == 1) {
 		UiGroup("Aim Assist");
 		UiToggle("Enable Aimbot", &g_Cfg.aim.enabled, "Hold right mouse button to engage.");
 		ImGui::BeginDisabled(!g_Cfg.aim.enabled);
@@ -783,8 +652,6 @@ static void RenderMenu() {
 		         "Higher is slower. 1 closes the whole gap in one frame.");
 		ImGui::EndDisabled();
 
-		/* Estos ajustes los comparten el aimbot y el soft aim, asi que basta con
-		 * que uno de los dos este activo para poder tocarlos. */
 		const bool anyAim = g_Cfg.aim.enabled || g_Cfg.aim.softAim;
 
 		UiGroup("How the view is moved");
@@ -839,7 +706,7 @@ static void RenderMenu() {
 		ImGui::Dummy(ImVec2(0, 4));
 		ImGui::TextWrapped("Status: %s", g_AimLog);
 	}
-	else if (g_MenuSection == 2) {     /* ---------------- Visuals -------- */
+	else if (g_MenuSection == 2) {
 		UiGroup("Style");
 		UiToggle("Outline", &Render::g_Style.outline,
 		         "Draws everything twice: black and thicker first, then in color.\n"
@@ -855,18 +722,8 @@ static void RenderMenu() {
 		{
 			const float fs = Render::FontSize();
 			const float boxH = 62.0f;
-			/* La altura sale del tamano de fuente elegido: con el texto grande,
-			 * un alto fijo dejaba las etiquetas fuera del recuadro. */
 			const float previewH = boxH + fs * 4.0f + 18.0f;
 
-			/* Se usa un child en vez de dibujar sobre la ventana.
-			 *
-			 * Con GetContentRegionAvail() el ancho que se obtenia era mayor que
-			 * el area realmente visible, asi que el dibujo se iba a la derecha y
-			 * el recorte lo cortaba: de ahi que la mitad clara ocupara casi todo
-			 * y la caja quedara pegada al borde. Dentro de un child,
-			 * GetWindowPos/GetWindowSize dan las coordenadas exactas del area, y
-			 * ademas recorta el solo. */
 			ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
 			ImGui::BeginChild("##stylepreview", ImVec2(0, previewH), true,
 			                  ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
@@ -877,11 +734,10 @@ static void RenderMenu() {
 			const ImVec2 sz = ImGui::GetWindowSize();
 			const float cx = a.x + sz.x * 0.5f;
 
-			/* Fondo oscuro y liso, sin mas. */
 			dl->AddRectFilled(a, ImVec2(a.x + sz.x, a.y + sz.y), IM_COL32(24, 24, 24, 255));
 
 			const float top = a.y + fs * 2.0f + 6.0f;
-			const float bw = boxH / 2.6f;                 /* misma proporcion que el ESP */
+			const float bw = boxH / 2.6f;
 			const ImVec2 btl(cx - bw * 0.5f, top);
 			const ImVec2 bbr(cx + bw * 0.5f, top + boxH);
 
@@ -891,7 +747,6 @@ static void RenderMenu() {
 				dl->AddRect(btl, bbr, Render::kOutline, 0, 0, t + Render::g_Style.outlineExtra);
 			dl->AddRect(btl, bbr, demoCol, 0, 0, t);
 
-			/* Barra de vida, igual que la del ESP. */
 			{
 				const float barW = 3.0f, bx = btl.x - barW - 3.0f;
 				dl->AddRectFilled(ImVec2(bx - 1, btl.y - 1), ImVec2(bx + barW + 1, bbr.y + 1), Render::kOutline);
@@ -919,7 +774,7 @@ static void RenderMenu() {
 			ImGui::PopStyleVar();
 		}
 	}
-	else if (g_MenuSection == 3) {     /* ---------------- Overlay -------- */
+	else if (g_MenuSection == 3) {
 		UiGroup("Overlay");
 		ImGui::Text("Toggle menu: INSERT");
 		ImGui::Text("Unload:      DELETE");
@@ -928,7 +783,7 @@ static void RenderMenu() {
 		ImGui::Dummy(ImVec2(0, 6));
 		ImGui::TextWrapped("The ESP draws on the background list, so this menu always stays on top of it.");
 	}
-	else if (g_MenuSection == 4) {     /* ---------------- Debug ---------- */
+	else if (g_MenuSection == 4) {
 		UiGroup("World scan");
 		if (!g_WorldScan.done) {
 			ImGui::TextDisabled("Not scanned yet.");
@@ -970,7 +825,6 @@ static void RenderMenu() {
 		}
 		else ImGui::TextDisabled("Camera not resolved.");
 
-		/* El combo usa 0..3; g_AxisOverride usa -1 para "auto". */
 		int axisSel = g_AxisOverride + 1;
 		if (UiCombo("FOV Axis", &axisSel,
 		            "Auto (read from game)\0Force Y-FOV\0Force X-FOV\0Force MajorAxis\0",
@@ -994,8 +848,6 @@ static void RenderMenu() {
 		UiGroup("Names (GNames)");
 		ImGui::Text("Status: %s", Names::g_Status);
 		{
-			/* Prueba en vivo: si aqui sale el nombre real de tu clase de pawn,
-			 * GNames y los offsets de UObject son correctos. */
 			char cn[128] = "";
 			if (adresses.acknowledged_pawn &&
 			    Names::GetClassName(adresses.acknowledged_pawn, cn, sizeof(cn)) && cn[0])
@@ -1020,8 +872,6 @@ static void RenderMenu() {
 		if (g_RefSkelOffset >= 0) { ImGui::SameLine(); ImGui::Text("(0x%X)", g_RefSkelOffset); }
 		ImGui::Text("cached skeletons: %d", (int)g_SkelCache.size());
 		{
-			/* Cuantos huesos pasan el filtro por nombre. Si `named` es no, el
-			 * esqueleto se dibuja en modo de respaldo (por longitud). */
 			int named = 0, core = 0, total = 0;
 			for (const auto& kv : g_SkelCache) {
 				if (!kv.second.valid) continue;
@@ -1033,8 +883,6 @@ static void RenderMenu() {
 		}
 	}
 
-	/* Aviso si el buscador no encuentra nada, salvo en las secciones que son
-	 * solo lectura y no tienen opciones filtrables. */
 	if (g_UiFilter[0] && g_UiShown == 0 && g_MenuSection != 3 && g_MenuSection != 4)
 		ImGui::TextDisabled("No options match \"%s\".", g_UiFilter);
 
@@ -1042,11 +890,7 @@ static void RenderMenu() {
 	ImGui::End();
 }
 
-/* ------------------------------ FRAME ---------------------------------- */
-
 void renderImGui() {
-	/* Red de seguridad: sin dispositivo o sin ventana no hay nada que dibujar,
-	 * y seguir seria desreferenciar un nulo dentro del proceso del juego. */
 	if (!pDevice || !overlayWindow) return;
 
 	if (!isInitialized) {
@@ -1056,10 +900,8 @@ void renderImGui() {
 		ImGui_ImplDX9_Init(pDevice);
 		ImGui_ImplDX9_CreateDeviceObjects();
 		Render::ApplyTheme();
-		/* Verifica la firma de AddYawInput/AddPitchInput una sola vez. Si no
-		 * cuadra, el aimbot usa la escritura directa y lo dice en su seccion. */
 		GameCalls::Resolve();
-		Names::Init();          /* FNamePool: nombres de hueso y de clase */
+		Names::Init();
 		isInitialized = true;
 	}
 
@@ -1072,7 +914,6 @@ void renderImGui() {
 	ImGui_ImplWin32_NewFrame();
 	ImGui::NewFrame();
 
-	/* Tamano real del cliente: la proyeccion depende de esto. */
 	const ImGuiIO& io = ImGui::GetIO();
 	if (io.DisplaySize.x > 0 && io.DisplaySize.y > 0) {
 		widthscreen = io.DisplaySize.x;
@@ -1084,16 +925,12 @@ void renderImGui() {
 
 	RenderESP();
 
-	/* Con el menu abierto no se apunta. Si no, cada clic en un control activaria
-	 * el soft aim (que se dispara con el boton izquierdo) y movería la vista
-	 * mientras el usuario esta tocando ajustes. */
 	if (!isMenuVisible) RunAimbot();
 	else strcpy_s(g_AimLog, "Paused (menu open)");
 
 	const ImVec2 screenCenter(widthscreen * 0.5f, heightscreen * 0.5f);
 	if (g_Cfg.aim.enabled && g_Cfg.aim.drawFov)
 		Render::Circle(screenCenter, g_Cfg.aim.fov, IM_COL32(255, 255, 255, 110));
-	/* El del soft aim va en otro color para poder distinguirlos de un vistazo. */
 	if (g_Cfg.aim.softAim && g_Cfg.aim.drawFov)
 		Render::Circle(screenCenter, g_Cfg.aim.softFov, IM_COL32(255, 200, 0, 110));
 
@@ -1156,8 +993,6 @@ void mainLoop() {
 			windowInfo->Height = windowRect.bottom;
 			SetWindowPos(overlayWindow, (HWND)0, windowPoint.x, windowPoint.y,
 			             windowInfo->Width, windowInfo->Height, SWP_NOREDRAW);
-			/* Reset invalida los objetos de ImGui: hay que soltarlos y recrearlos,
-			 * o la siguiente pasada dibuja con recursos muertos. */
 			if (pDevice) {
 				if (isInitialized) ImGui_ImplDX9_InvalidateDeviceObjects();
 				pDevice->Reset(&gD3DPresentParams);
@@ -1233,12 +1068,8 @@ bool createDirectX() {
 static bool InitOnThread();
 
 DWORD WINAPI MainThread(HMODULE hMod) {
-	/* Todo lo que antes se hacia en DllMain (asignaciones, user32) se hace aqui,
-	 * ya fuera del loader lock. */
 	if (!InitOnThread()) FreeLibraryAndExitThread(hMod, 0);
 
-	/* nothrow: una excepcion escapando de un hilo de una DLL inyectada mata el
-	 * proceso del juego, no solo al overlay. */
 	windowInfo = new (std::nothrow) WindowInfo();
 	if (!windowInfo) FreeLibraryAndExitThread(hMod, 0);
 	ZeroMemory(windowInfo, sizeof(WindowInfo));
@@ -1262,15 +1093,9 @@ DWORD WINAPI MainThread(HMODULE hMod) {
 		Sleep(50);
 	}
 
-	/* Sin estas comprobaciones, si createDirectX fallaba (sistema sin D3D9,
-	 * driver ocupado, sin recursos) pDevice quedaba nulo y el primer frame hacia
-	 * pDevice->Clear(...) sobre un nulo: crash del JUEGO, no solo del overlay.
-	 * Ante un fallo se descarga la DLL sin tocar nada mas. */
 	if (createOverlay() && createDirectX() && pDevice)
 		mainLoop();
 
-	/* Shutdown solo si se llego a inicializar: llamar a los Shutdown de ImGui
-	 * sin su Init previo es comportamiento indefinido. */
 	if (isInitialized) {
 		ImGui_ImplDX9_Shutdown();
 		ImGui_ImplWin32_Shutdown();
@@ -1299,12 +1124,6 @@ BOOL __stdcall StartThread(LPTHREAD_START_ROUTINE startaddr, HMODULE hMod) {
 	return CloseHandle(h);
 }
 
-/* Inicializacion real. Va en el hilo, NO en DllMain.
- *
- * DllMain corre con el loader lock del proceso tomado. Reservar memoria, llamar
- * a user32 o construir std::string ahi puede bloquear el proceso entero del
- * juego si otro hilo esta cargando modulos a la vez. La regla es que DllMain
- * solo cree el hilo y devuelva. */
 static bool InitOnThread() {
 	std::srand((unsigned)std::time(nullptr));
 	ovarlayName = generateRandomString(generateRandomInt(30, 100));
@@ -1326,7 +1145,6 @@ BOOL APIENTRY DllMain(HMODULE hmodule, DWORD dwreason, LPVOID lpreserved) {
 	switch (dwreason) {
 	case DLL_PROCESS_ATTACH:
 		DisableThreadLibraryCalls(hmodule);
-		/* Lo unico que se hace bajo el loader lock. */
 		if (!StartThread((LPTHREAD_START_ROUTINE)MainThread, hmodule))
 			return FALSE;
 		break;

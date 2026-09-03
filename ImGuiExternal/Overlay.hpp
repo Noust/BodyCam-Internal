@@ -9,12 +9,7 @@
 void inputHandler();
 LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
-/* Antes hacia "x->Release(); delete x;". Release() ya destruye el objeto COM;
- * el delete despues liberaba memoria que no era nuestra. Doble liberacion,
- * crash al cerrar. */
 #define clearVariable(x) do { if (x) { (x)->Release(); (x) = nullptr; } } while (0)
-
-/* Todas inline: este header lo incluyen Source.cpp y hookfunc.cpp. */
 
 inline std::string generateRandomString(int length) {
     const std::string characters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -48,7 +43,6 @@ inline DWORD getProcessID(std::string processName) {
 
 typedef struct { DWORD R, G, B, A; } RGBA;
 
-/* Partículas del fondo del menú. Solo decorativo, y solo con el menú abierto. */
 inline void DrawBackgroundAnimation() {
     static std::vector<ImVec2> particles;
     static std::vector<float> particleAngles;

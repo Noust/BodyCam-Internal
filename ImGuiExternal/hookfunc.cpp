@@ -1,20 +1,9 @@
 #include "include.h"
 
-/* NOTA: ninguna de las funciones de hook de este archivo se usa actualmente.
- * Se conservan por si mas adelante hace falta un hook (ver §9.2 del .md), pero
- * NO sirven tal cual para hookear una funcion y seguir llamando a la original:
- * escriben encima sin conservar las instrucciones desplazadas. Para eso haria
- * falta un trampolin de verdad. */
-
 bool hookclass::Detour32(void* src, void* dst, int len)
 {
 	if (!src || !dst || len < 5) return false;
 
-	/* Un `jmp rel32` lleva un desplazamiento de 4 BYTES, no de 8. El codigo
-	 * original escribia un uintptr_t entero, machacando 4 bytes de mas ademas
-	 * de los `len` reservados. Sobre codigo del juego eso lo corrompe.
-	 * Ademas hay que comprobar que el salto cabe en 32 bits con signo: en x64
-	 * dos modulos pueden estar a mas de 2 GB de distancia. */
 	const ptrdiff_t delta = (ptrdiff_t)((uintptr_t)dst - (uintptr_t)src) - 5;
 	if (delta > INT32_MAX || delta < INT32_MIN) return false;
 	const int32_t rel = (int32_t)delta;
@@ -97,27 +86,6 @@ DWORD64 hookclass::FindPattern(char* module, char* pattern, char* mask)
 	return NULL;
 }
 
-/* ---------------------------------------------------------------------------
- *  GWorld ya NO se fija por RVA.
- *
- *  Se intento derivarlo estaticamente y fallo dos veces:
- *    - 0x9934600 : resulto ser `__security_cookie`. El perfil "muchisimas
- *                  lecturas, una sola escritura" que parecia identificar a
- *                  GWorld lo cumple el cookie, porque se carga en el prologo de
- *                  casi todas las funciones del binario.
- *    - 0x9C1DAA0 : es `GEngine`. Se usa con +0xFB0, offset que ni siquiera cabe
- *                  en UWorld (sizeof 0x908).
- *
- *  En vez de seguir adivinando, el mundo se localiza en runtime recorriendo las
- *  secciones de datos del modulo y validando cada candidato contra la cadena
- *  real del juego (ver ScanForGWorld en reader.hpp). Solo el UWorld verdadero
- *  tiene GameInstance -> LocalPlayers -> PlayerController -> CameraManager.
- *
- *  Ventaja anadida: esto sobrevive a los parches del juego sin tocar codigo.
- * ------------------------------------------------------------------------- */
-
 void hookclass::GetAddreses() {
-	/* Se deja a cero a proposito: ResolveGWorld() hara la busqueda en el primer
-	 * frame y guardara aqui la direccion de la global. */
 	Uworld = 0;
 }

@@ -2,7 +2,6 @@
 #include "include.h"
 #include <corecrt_math_defines.h>
 
-
 struct Vector2 {
 	float x, y;
 
@@ -30,10 +29,8 @@ struct Vector2 {
 struct Vector3 {
 	float x, y, z;
 
-	// Default constructor
 	Vector3() : x(0.0f), y(0.0f), z(0.0f) {}
-	
-	// Constructor with three float parameters
+
 	Vector3(float _x, float _y, float _z) : x(_x), y(_y), z(_z) {}
 
 	Vector3 operator+(Vector3 V) {
@@ -102,20 +99,15 @@ public:
 
 	}
 
-
 	fvector2d operator-(fvector2d v)
 	{
 		return fvector2d(x - v.x, y - v.y);
 	}
 
-
 	double x;
 	double y;
 
-
-
 };
-
 
 class fvector
 {
@@ -133,18 +125,14 @@ public:
 	{
 
 	}
-	
+
 	double x,y,z;
 
-	/* const en todos: las posiciones se pasan como const fvector& por todo el
-	 * ESP y sin const el compilador rechaza cada operacion. */
 	inline double dot(const fvector& v) const
 	{
 		return x * v.x + y * v.y + z * v.z;
 	}
 
-	/* En double. Con sqrtf/powf (float) la distancia a un enemigo lejano se
-	 * redondeaba de forma visible: las coordenadas de mundo de UE5 son grandes. */
 	inline double distance(fvector v) const
 	{
 		const double dx = v.x - x, dy = v.y - y, dz = v.z - z;
@@ -188,16 +176,6 @@ struct FMinimalViewInfo
 	float FOV;
 };
 
-/* FTransform de UE5 con LWC: 0x60 bytes.
- *   FQuat   Rot         @0x00  (4 doubles)
- *   FVector Translation @0x20  (3 doubles)
- *   FVector Scale3D     @0x40  (3 doubles)
- * El padding es el que mete el compilador para alinear a 8; el static_assert
- * de abajo garantiza que el layout coincide con el del juego.
- *
- * Las cuentas del cuaternion van en double: con coordenadas de mundo grandes
- * (LWC llega a cientos de miles de unidades) hacerlas en float pierde
- * precision visible en la posicion de los huesos. */
 struct FTransform
 {
 	fquat rot;
@@ -247,8 +225,6 @@ struct FTransform
 		return m;
 	}
 
-	/* Aplica esta transformada a un punto en espacio local. Todo en double:
-	 * es el camino critico de la posicion de cada hueso. */
 	fvector TransformPosition(const fvector& p) const
 	{
 		const double x2 = rot.x + rot.x, y2 = rot.y + rot.y, z2 = rot.z + rot.z;
@@ -265,16 +241,13 @@ struct FTransform
 	}
 };
 
-/* Si esto salta, el struct no coincide con la memoria del juego y todas las
- * posiciones de huesos saldrian mal. Verificado por ASM: el memcpy de
- * USkinnedMeshComponent copia 96 bytes por elemento. */
-static_assert(sizeof(FTransform) == 0x60, "FTransform debe medir 0x60 (UE5 LWC)");
-static_assert(offsetof(FTransform, translation) == 0x20, "Translation debe ir en 0x20");
-static_assert(offsetof(FTransform, scale) == 0x40, "Scale3D debe ir en 0x40");
-static_assert(sizeof(fvector) == 24, "FVector de UE5 son 3 doubles");
+static_assert(sizeof(FTransform) == 0x60, "FTransform must be 0x60 bytes (UE5 LWC)");
+static_assert(offsetof(FTransform, translation) == 0x20, "Translation must be at 0x20");
+static_assert(offsetof(FTransform, scale) == 0x40, "Scale3D must be at 0x40");
+static_assert(sizeof(fvector) == 24, "UE5 FVector is three doubles");
 inline D3DMATRIX MatrixMultiplication(D3DMATRIX pM1, D3DMATRIX pM2)
 {
-	
+
 		D3DMATRIX pOut;
 	pOut._11 = pM1._11 * pM2._11 + pM1._12 * pM2._21 + pM1._13 * pM2._31 + pM1._14 * pM2._41;
 	pOut._12 = pM1._11 * pM2._12 + pM1._12 * pM2._22 + pM1._13 * pM2._32 + pM1._14 * pM2._42;
@@ -297,9 +270,6 @@ inline D3DMATRIX MatrixMultiplication(D3DMATRIX pM1, D3DMATRIX pM2)
 }
 #define PI 3.14159265358979323846f
 
-/* inline obligatorio: este header lo incluyen Source.cpp y hookfunc.cpp, y sin
- * inline el simbolo sale duplicado (hoy lo tapa /FORCE:MULTIPLE en el linker,
- * que es peor: cada .cpp puede acabar con su propia copia). */
 inline D3DXMATRIX Matrix(fvector rot, fvector origin = fvector(0, 0, 0))
 {
 	float radPitch = (float)(rot.x * M_PI / 180.0);
@@ -329,8 +299,6 @@ inline D3DXMATRIX Matrix(fvector rot, fvector origin = fvector(0, 0, 0))
 	matrix.m[2][2] = CR * CP;
 	matrix.m[2][3] = 0.f;
 
-	/* La matriz de D3D es float por definicion; el truncado es intencionado y
-	 * solo afecta al origen, que para la matriz de rotacion de la camara es 0. */
 	matrix.m[3][0] = (float)origin.x;
 	matrix.m[3][1] = (float)origin.y;
 	matrix.m[3][2] = (float)origin.z;
@@ -339,15 +307,12 @@ inline D3DXMATRIX Matrix(fvector rot, fvector origin = fvector(0, 0, 0))
 	return matrix;
 }
 
-// FRotator struct matching UE5 memory layout (3 doubles: Pitch, Yaw, Roll)
 struct FRotator {
 	double Pitch;
 	double Yaw;
 	double Roll;
 };
 
-// Calcula el angulo de rotacion desde una posicion origen hacia una posicion destino
-// Retorna FRotator con Pitch y Yaw en grados, Roll siempre 0
 inline FRotator CalcAngle(fvector src, fvector dst) {
 	fvector delta = dst - src;
 	double hyp = sqrt(delta.x * delta.x + delta.y * delta.y);
@@ -359,14 +324,12 @@ inline FRotator CalcAngle(fvector src, fvector dst) {
 	return angle;
 }
 
-// Normaliza un angulo a rango [-180, 180]
 inline double NormalizeAngle(double angle) {
 	while (angle > 180.0) angle -= 360.0;
 	while (angle < -180.0) angle += 360.0;
 	return angle;
 }
 
-// Interpola suavemente entre la rotacion actual y la objetivo
 inline FRotator SmoothRotation(FRotator current, FRotator target, float smoothing) {
 	FRotator result;
 	result.Pitch = current.Pitch + NormalizeAngle(target.Pitch - current.Pitch) / smoothing;
@@ -375,7 +338,6 @@ inline FRotator SmoothRotation(FRotator current, FRotator target, float smoothin
 	return result;
 }
 
-// Calcula la distancia 2D en pantalla entre el crosshair y una posicion
 inline double GetCrosshairDistance(fvector2d screenPos, float screenW, float screenH) {
 	double cx = screenW / 2.0;
 	double cy = screenH / 2.0;
@@ -383,6 +345,3 @@ inline double GetCrosshairDistance(fvector2d screenPos, float screenW, float scr
 	double dy = screenPos.y - cy;
 	return sqrt(dx * dx + dy * dy);
 }
-
-
-
