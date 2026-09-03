@@ -23,7 +23,7 @@ struct Vector2 {
 	}
 
 	float distance(Vector2 V) {
-		return sqrt(pow(V.x - x, 2) + pow(V.y - y, 2));
+				return (float)(sqrt(pow(V.x - x, 2) + pow(V.y - y, 2)));
 	}
 };
 
@@ -57,7 +57,7 @@ struct Vector3 {
 	}
 
 	float distance(Vector3 V) {
-		return sqrt(pow(V.x - x, 2) + pow(V.y - y, 2) + pow(V.z - z, 2));
+				return (float)(sqrt(pow(V.x - x, 2) + pow(V.y - y, 2) + pow(V.z - z, 2)));
 	}
 };
 
@@ -81,7 +81,7 @@ struct Vector4 {
 	}
 
 	float distance(Vector4 V) {
-		return sqrt(pow(V.x - x, 2) + pow(V.y - y, 2) + pow(V.z - z, 2) + pow(V.w - w, 2));
+				return (float)(sqrt(pow(V.x - x, 2) + pow(V.y - y, 2) + pow(V.z - z, 2) + pow(V.w - w, 2)));
 	}
 };
 
@@ -136,37 +136,41 @@ public:
 	
 	double x,y,z;
 
-	inline double dot(fvector v)
+	/* const en todos: las posiciones se pasan como const fvector& por todo el
+	 * ESP y sin const el compilador rechaza cada operacion. */
+	inline double dot(const fvector& v) const
 	{
 		return x * v.x + y * v.y + z * v.z;
 	}
 
-	inline double distance(fvector v)
+	/* En double. Con sqrtf/powf (float) la distancia a un enemigo lejano se
+	 * redondeaba de forma visible: las coordenadas de mundo de UE5 son grandes. */
+	inline double distance(fvector v) const
 	{
-		return double(sqrtf(powf(v.x - x, 2.0) + powf(v.y - y, 2.0) + powf(v.z - z, 2.0)));
+		const double dx = v.x - x, dy = v.y - y, dz = v.z - z;
+		return sqrt(dx * dx + dy * dy + dz * dz);
 	}
 
-	inline double length() {
+	inline double length() const {
 		return sqrt(x * x + y * y + z * z);
 	}
 
-	fvector operator+(fvector v)
+	fvector operator+(const fvector& v) const
 	{
 		return fvector(x + v.x, y + v.y, z + v.z);
 	}
 
-	fvector operator-(fvector v)
+	fvector operator-(const fvector& v) const
 	{
 		return fvector(x - v.x, y - v.y, z - v.z);
 	}
 
-	fvector operator/(double flNum)
+	fvector operator/(double flNum) const
 	{
 		return fvector(x / flNum, y / flNum, z / flNum);
 	}
 
-
-	fvector operator*(double flNum) { return fvector(x * flNum, y * flNum, z * flNum); }
+	fvector operator*(double flNum) const { return fvector(x * flNum, y * flNum, z * flNum); }
 
 };
 struct fquat
@@ -183,8 +187,17 @@ struct FMinimalViewInfo
 	fvector Rotation;
 	float FOV;
 };
-FMinimalViewInfo POV;
 
+/* FTransform de UE5 con LWC: 0x60 bytes.
+ *   FQuat   Rot         @0x00  (4 doubles)
+ *   FVector Translation @0x20  (3 doubles)
+ *   FVector Scale3D     @0x40  (3 doubles)
+ * El padding es el que mete el compilador para alinear a 8; el static_assert
+ * de abajo garantiza que el layout coincide con el del juego.
+ *
+ * Las cuentas del cuaternion van en double: con coordenadas de mundo grandes
+ * (LWC llega a cientos de miles de unidades) hacerlas en float pierde
+ * precision visible en la posicion de los huesos. */
 struct FTransform
 {
 	fquat rot;
@@ -192,39 +205,39 @@ struct FTransform
 	char pad[4];
 	fvector scale;
 	char pad1[4];
-	D3DMATRIX ToMatrixWithScale()
+
+	D3DMATRIX ToMatrixWithScale() const
 	{
-
 		D3DMATRIX m;
-		m._41 = translation.x;
-		m._42 = translation.y;
-		m._43 = translation.z;
+		m._41 = (float)translation.x;
+		m._42 = (float)translation.y;
+		m._43 = (float)translation.z;
 
-		float x2 = rot.x + rot.x;
-		float y2 = rot.y + rot.y;
-		float z2 = rot.z + rot.z;
+		const double x2 = rot.x + rot.x;
+		const double y2 = rot.y + rot.y;
+		const double z2 = rot.z + rot.z;
 
-		float xx2 = rot.x * x2;
-		float yy2 = rot.y * y2;
-		float zz2 = rot.z * z2;
-		m._11 = (1.0f - (yy2 + zz2)) * scale.x;
-		m._22 = (1.0f - (xx2 + zz2)) * scale.y;
-		m._33 = (1.0f - (xx2 + yy2)) * scale.z;
+		const double xx2 = rot.x * x2;
+		const double yy2 = rot.y * y2;
+		const double zz2 = rot.z * z2;
+		m._11 = (float)((1.0 - (yy2 + zz2)) * scale.x);
+		m._22 = (float)((1.0 - (xx2 + zz2)) * scale.y);
+		m._33 = (float)((1.0 - (xx2 + yy2)) * scale.z);
 
-		float yz2 = rot.y * z2;
-		float wx2 = rot.w * x2;
-		m._32 = (yz2 - wx2) * scale.z;
-		m._23 = (yz2 + wx2) * scale.y;
+		const double yz2 = rot.y * z2;
+		const double wx2 = rot.w * x2;
+		m._32 = (float)((yz2 - wx2) * scale.z);
+		m._23 = (float)((yz2 + wx2) * scale.y);
 
-		float xy2 = rot.x * y2;
-		float wz2 = rot.w * z2;
-		m._21 = (xy2 - wz2) * scale.y;
-		m._12 = (xy2 + wz2) * scale.x;
+		const double xy2 = rot.x * y2;
+		const double wz2 = rot.w * z2;
+		m._21 = (float)((xy2 - wz2) * scale.y);
+		m._12 = (float)((xy2 + wz2) * scale.x);
 
-		float xz2 = rot.x * z2;
-		float wy2 = rot.w * y2;
-		m._31 = (xz2 + wy2) * scale.z;
-		m._13 = (xz2 - wy2) * scale.x;
+		const double xz2 = rot.x * z2;
+		const double wy2 = rot.w * y2;
+		m._31 = (float)((xz2 + wy2) * scale.z);
+		m._13 = (float)((xz2 - wy2) * scale.x);
 
 		m._14 = 0.0f;
 		m._24 = 0.0f;
@@ -233,7 +246,32 @@ struct FTransform
 
 		return m;
 	}
+
+	/* Aplica esta transformada a un punto en espacio local. Todo en double:
+	 * es el camino critico de la posicion de cada hueso. */
+	fvector TransformPosition(const fvector& p) const
+	{
+		const double x2 = rot.x + rot.x, y2 = rot.y + rot.y, z2 = rot.z + rot.z;
+		const double xx2 = rot.x * x2, yy2 = rot.y * y2, zz2 = rot.z * z2;
+		const double xy2 = rot.x * y2, xz2 = rot.x * z2, yz2 = rot.y * z2;
+		const double wx2 = rot.w * x2, wy2 = rot.w * y2, wz2 = rot.w * z2;
+
+		const double sx = p.x * scale.x, sy = p.y * scale.y, sz = p.z * scale.z;
+
+		return fvector(
+			sx * (1.0 - (yy2 + zz2)) + sy * (xy2 - wz2) + sz * (xz2 + wy2) + translation.x,
+			sx * (xy2 + wz2) + sy * (1.0 - (xx2 + zz2)) + sz * (yz2 - wx2) + translation.y,
+			sx * (xz2 - wy2) + sy * (yz2 + wx2) + sz * (1.0 - (xx2 + yy2)) + translation.z);
+	}
 };
+
+/* Si esto salta, el struct no coincide con la memoria del juego y todas las
+ * posiciones de huesos saldrian mal. Verificado por ASM: el memcpy de
+ * USkinnedMeshComponent copia 96 bytes por elemento. */
+static_assert(sizeof(FTransform) == 0x60, "FTransform debe medir 0x60 (UE5 LWC)");
+static_assert(offsetof(FTransform, translation) == 0x20, "Translation debe ir en 0x20");
+static_assert(offsetof(FTransform, scale) == 0x40, "Scale3D debe ir en 0x40");
+static_assert(sizeof(fvector) == 24, "FVector de UE5 son 3 doubles");
 inline D3DMATRIX MatrixMultiplication(D3DMATRIX pM1, D3DMATRIX pM2)
 {
 	
@@ -259,11 +297,14 @@ inline D3DMATRIX MatrixMultiplication(D3DMATRIX pM1, D3DMATRIX pM2)
 }
 #define PI 3.14159265358979323846f
 
-D3DXMATRIX Matrix(fvector rot, fvector origin = fvector(0, 0, 0))
+/* inline obligatorio: este header lo incluyen Source.cpp y hookfunc.cpp, y sin
+ * inline el simbolo sale duplicado (hoy lo tapa /FORCE:MULTIPLE en el linker,
+ * que es peor: cada .cpp puede acabar con su propia copia). */
+inline D3DXMATRIX Matrix(fvector rot, fvector origin = fvector(0, 0, 0))
 {
-	float radPitch = (rot.x * float(M_PI) / 180.f);
-	float radYaw = (rot.y * float(M_PI) / 180.f);
-	float radRoll = (rot.z * float(M_PI) / 180.f);
+	float radPitch = (float)(rot.x * M_PI / 180.0);
+	float radYaw = (float)(rot.y * M_PI / 180.0);
+	float radRoll = (float)(rot.z * M_PI / 180.0);
 
 	float SP = sinf(radPitch);
 	float CP = cosf(radPitch);
@@ -288,9 +329,11 @@ D3DXMATRIX Matrix(fvector rot, fvector origin = fvector(0, 0, 0))
 	matrix.m[2][2] = CR * CP;
 	matrix.m[2][3] = 0.f;
 
-	matrix.m[3][0] = origin.x;
-	matrix.m[3][1] = origin.y;
-	matrix.m[3][2] = origin.z;
+	/* La matriz de D3D es float por definicion; el truncado es intencionado y
+	 * solo afecta al origen, que para la matriz de rotacion de la camara es 0. */
+	matrix.m[3][0] = (float)origin.x;
+	matrix.m[3][1] = (float)origin.y;
+	matrix.m[3][2] = (float)origin.z;
 	matrix.m[3][3] = 1.f;
 
 	return matrix;
@@ -328,7 +371,7 @@ inline FRotator SmoothRotation(FRotator current, FRotator target, float smoothin
 	FRotator result;
 	result.Pitch = current.Pitch + NormalizeAngle(target.Pitch - current.Pitch) / smoothing;
 	result.Yaw = current.Yaw + NormalizeAngle(target.Yaw - current.Yaw) / smoothing;
-	result.Ro0;
+	result.Roll = 0.0;
 	return result;
 }
 
