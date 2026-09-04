@@ -2,9 +2,17 @@
 #include "include.h"
 
 enum offset {
+	uobject_flags           = 0x08,
+	uobject_internal_index  = 0x0C,
+	uobject_class           = 0x10,
+	uobject_name            = 0x18,
+	uobject_outer           = 0x20,
+
 	persistent_level        = 0x30,
 	game_state              = 0x160,
 	game_instance           = 0x1D8,
+
+	level_owning_world      = 0xC0,
 
 	local_player            = 0x38,
 	player_controller       = 0x30,
@@ -49,6 +57,7 @@ enum offset {
 	remote_view_pitch       = 0x2BA,
 	player_state            = 0x2C8,
 	pawn_controller         = 0x2D8,
+	ac_player_state         = 0x2B0,
 	control_rotation        = 0x320,
 
 	rotation_input          = 0x528,

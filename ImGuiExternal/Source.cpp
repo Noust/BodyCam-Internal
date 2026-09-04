@@ -784,28 +784,40 @@ static void RenderMenu() {
 		ImGui::TextWrapped("The ESP draws on the background list, so this menu always stays on top of it.");
 	}
 	else if (g_MenuSection == 4) {
-		UiGroup("World scan");
+		UiGroup("World anchor");
 		if (!g_WorldScan.done) {
 			ImGui::TextDisabled("Not scanned yet.");
 		}
 		else if (g_WorldScan.globalAddr) {
-			ImGui::Text("Found GWorld global at 0x%llX", (unsigned long long)g_WorldScan.globalAddr);
+			static const char* tierName[4] = { "none", "weak (game instance only)",
+			                                   "strong (full chain)", "confirmed (roster match)" };
+			ImGui::Text("Anchor slot 0x%llX", (unsigned long long)g_WorldScan.globalAddr);
 			ImGui::Text("Module RVA  0x%llX",
-			            (unsigned long long)(g_WorldScan.globalAddr -
-			                (uintptr_t)GetModuleHandleA("Bodycam-Win64-Shipping.exe")));
+			            (unsigned long long)(g_WorldScan.globalAddr - GameModuleBase()));
 			ImGui::Text("UWorld      0x%llX", (unsigned long long)g_WorldScan.worldPtr);
-			ImGui::Text("Match       %s", g_WorldScan.strict ? "strict (full chain)" : "loose (no controller)");
+			ImGui::Text("Scan match  %s",
+			            (g_WorldScan.tier >= 0 && g_WorldScan.tier < 4) ? tierName[g_WorldScan.tier] : "?");
 		}
 		else {
 			ImGui::TextColored(ImVec4(1, 0.4f, 0.4f, 1), "No world found.");
 			ImGui::TextWrapped("Join a match and reopen this page. In the main menu there is "
 			                   "no world to find yet.");
 		}
-		ImGui::Text("Pointers checked %d   scan took %u ms", g_WorldScan.candidates, g_WorldScan.scanMs);
+		ImGui::Text("Pointers checked %d   last scan %u ms   full scans %d",
+		            g_WorldScan.candidates, g_WorldScan.scanMs, g_WorldScan.fullScans);
+		ImGui::Text("Map-change recoveries %d   re-anchors %d",
+		            g_WorldScan.rescues, g_WorldScan.reanchors);
+		ImGui::TextWrapped("The world is confirmed every frame by checking that your own PlayerState "
+		                   "is inside its roster. If a map change leaves the anchor stale, the current "
+		                   "world is recovered through the controller's level and the anchor is moved.");
 
 		UiGroup("Chain");
 		ImGui::Text("Stage:      %s", ChainStageName(adresses.stage));
-		ImGui::Text("GWorld addr 0x%llX  ->  UWorld 0x%llX", (unsigned long long)Uworld, (unsigned long long)adresses.uworld);
+		if (adresses.proven)
+			ImGui::TextColored(ImVec4(0.4f, 1, 0.4f, 1), "World confirmed: yes (roster contains local player)");
+		else
+			ImGui::TextColored(ImVec4(1, 0.75f, 0.3f, 1), "World confirmed: no");
+		ImGui::Text("Anchor slot 0x%llX  ->  UWorld 0x%llX", (unsigned long long)Uworld, (unsigned long long)adresses.uworld);
 		ImGui::Text("GameState   0x%llX", (unsigned long long)adresses.game_state);
 		ImGui::Text("PlayerArray 0x%llX  count=%d", (unsigned long long)adresses.player_array, adresses.player_count);
 		ImGui::Text("LocalPawn   0x%llX  team=%d", (unsigned long long)adresses.acknowledged_pawn, adresses.local_team);
@@ -865,8 +877,9 @@ static void RenderMenu() {
 
 		UiGroup("Bone counters");
 		ImGui::Text("skeletons drawn %d", g_BoneDiag.drawn);
-		ImGui::Text("noMesh %d  noPose %d  noAsset %d  noHierarchy %d",
-		            g_BoneDiag.noMesh, g_BoneDiag.noPose, g_BoneDiag.noAsset, g_BoneDiag.noHierarchy);
+		ImGui::Text("noMesh %d  noPose %d  noAsset %d  noHierarchy %d  badMesh %d",
+		            g_BoneDiag.noMesh, g_BoneDiag.noPose, g_BoneDiag.noAsset,
+		            g_BoneDiag.noHierarchy, g_BoneDiag.badMesh);
 		ImGui::Text("RefSkeleton offset in asset: %s",
 		            g_RefSkelOffset >= 0 ? "found" : "not found yet");
 		if (g_RefSkelOffset >= 0) { ImGui::SameLine(); ImGui::Text("(0x%X)", g_RefSkelOffset); }

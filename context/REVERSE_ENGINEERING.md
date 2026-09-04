@@ -10,10 +10,13 @@
 
 ## 0. TL;DR — lo que hay que saber antes de tocar nada
 
+> **Build vigente: la del parche del 2026-09-03.** 394.579 funciones. La anterior
+> tenía 394.552 y **todos los RVAs cambiaron**. Los offsets de clase **no**: ver §12.
+
 | Cosa | Valor | Nota |
 |---|---|---|
 | Proceso | `Bodycam-Win64-Shipping.exe` | ImageBase `0x140000000` |
-| Módulo del juego | `/Script/Bodycam` | 155 clases propias |
+| Módulo del juego | `/Script/Bodycam` | 156 clases propias |
 | Arquitectura del cheat | **DLL inyectada** | lectura in-process, overlay D3D9 propio |
 | `GWorld` | **se busca y valida en runtime** | no hay RVA fiable — ver §2.1 |
 | Clase del jugador | `ABodycamCharacter` (`0x680`) | deriva de `ACharacter` (`0x650`) |
@@ -21,7 +24,7 @@
 | Equipo | `APlayerState+0x388` (`TeamId`, int32) | NO está en el pawn |
 | Roster | `AGameStateBase+0x2C0` (`PlayerArray`) | el código viejo decía `0x338` ✗ |
 
-### Las cuatro trampas de este juego
+### Las seis trampas de este juego
 
 **A) El `PlayerArray` viejo (`0x338`) es imposible.**
 `AGameStateBase` mide `0x300` `[XVAL]`. Un offset `0x338` cae fuera de la clase.
@@ -44,6 +47,18 @@ El código viejo leía un `double` en `+0xB0`; hoy es un `float` en `+0x94`.
 Hacer `if (z < 1) z = 1` en vez de rechazar el punto dibuja a los enemigos de
 detrás como si estuvieran delante, en espejo. Hay que devolver "no visible".
 
+**E) `GWorld` no se puede derivar por RVA con heurísticas de lecturas/escrituras.**
+Ese perfil lo cumple `__security_cookie`. Ver §2.1.
+
+**F) Validar el `UWorld` por su `GameInstance` NO sirve: da un falso positivo eterno.**
+`UGameInstance` y `ULocalPlayer` **sobreviven al cambio de mapa**. Así que un
+`UWorld` viejo y ya destruido sigue teniendo un `+0x1D8` que resuelve, y con él
+todo el resto de la cadena hasta el `PlayerController`. Un ancla que apunte a ese
+mundo muerto **pasa la validación para siempre**: el `GameState` que se lee es el
+del mapa anterior, el roster sale vacío y nunca se vuelve a buscar.
+La prueba correcta es específica del mundo: **el `PlayerArray` del `GameState` de
+ese `UWorld` tiene que contener tu propio `APlayerState`.** Ver §2.1.
+
 ---
 
 ## 1. Entorno
@@ -51,19 +66,25 @@ detrás como si estuvieran delante, en espejo. Hay que devolver "no visible".
 ```
 Ruta      D:\SteamLibrary\steamapps\common\Bodycam\Bodycam\Binaries\Win64\Bodycam-Win64-Shipping.exe
 ImageBase 0x140000000
-Funciones 394.552
+Funciones 394.579        (build del 2026-09-03; la anterior tenía 394.552)
 ```
 
-### Segmentos
+### Segmentos (build 2026-09-03)
 
 | Nombre | Inicio | Fin | Tamaño |
 |---|---|---|---|
-| `.text`   | `0x140001000` | `0x14764a000` | `0x7649000` |
-| `.rdata`  | `0x14764c4c0` | `0x14976a000` | `0x211db40` |
-| `.data`   | `0x14976a000` | `0x14996ee68` | `0x204e68` |
-| `.data` (2) | `0x14996fee0` | `0x149da9000` | `0x439120` |
-| `.pdata`  | `0x149da9000` | `0x14a3a6000` | `0x5fd000` |
-| `_RDATA`  | `0x14a3a8000` | `0x14a406000` | `0x5e000` |
+| `.text`   | `0x140001000` | `0x14764b000` | `0x764a000` |
+| `.idata`  | `0x14764b000` | `0x14764d4c0` | `0x24c0` |
+| `.rdata`  | `0x14764d4c0` | `0x14976b000` | `0x211db40` |
+| `.data`   | `0x14976b000` | `0x14996ffe8` | `0x204fe8` |
+| `.idata` (2) | `0x14996ffe8` | `0x149971060` | `0x1078` |
+| `.data` (2) | `0x149971060` | `0x149daa000` | `0x438fa0` |
+| `.pdata`  | `0x149daa000` | `0x14a3a7000` | `0x5fd000` |
+| `_RDATA`  | `0x14a3a9000` | `0x14a407000` | `0x5e000` |
+
+`.text` creció `0x1000` respecto a la build anterior, así que **las direcciones de
+código no se desplazaron todas por igual** y las de datos sí, pero por `0x1180`,
+no por `0x1000`. Moraleja: tras un parche, **no restes deltas: vuelve a buscar**.
 
 ### Versión del motor
 No hay string `++UE5+Release-x.y` en el binario. La versión se deduce por los
@@ -96,34 +117,45 @@ Lo que **sí** coincide (y por eso conviene reusar la lógica, no los números):
 > ⚠️ **`GWorld` NO se localiza por RVA en este proyecto.** Ver §2.1: dos intentos
 > de derivarlo estáticamente dieron globales equivocadas. Se busca en runtime.
 
-| Global | RVA | Evidencia |
-|---|---|---|
-| `__security_cookie` | `0x9934600` | `[ASM]` **no es de engine**: 29.689 lecturas, de las cuales 29.687 van seguidas de `xor` con `rsp` |
-| `GEngine` (probable) | `0x9C1DAA0` | `[ASM]` 1.366 lecturas / 2 escrituras; se usa con `+0xFB0`, que no cabe en `UWorld` `[DED]` |
-| **`GNames`** (`FNamePool`) | **`0x99C1840`** | `[ASM]` — ver §2.2 |
-| **`GUObjectArray`** (base) | **`0x9AA4FE0`** | `[ASM]` = `ObjObjects` − `0x10` |
-| **`GUObjectArray.ObjObjects.Objects`** | **`0x9AA4FF0`** | `[ASM]` tabla de chunks |
-| **`GUObjectArray.ObjObjects.NumElements`** | **`0x9AA5004`** | `[ASM]` |
-| `GetPrivateStaticClassBody` | `0x1378740` (VA `0x141378740`) | `[ASM]` 5.410 xrefs |
+| Global | RVA (build 2026-09-03) | RVA anterior | Evidencia |
+|---|---|---|---|
+| **`GNames`** (`FNamePool`) | **`0x99C29C0`** | `0x99C1840` | `[ASM]` 11/11 sitios coinciden — ver §2.2 |
+| **`GUObjectArray`** (base) | **`0x9AA6160`** | `0x9AA4FE0` | `[ASM]` = `Objects` − `0x10` |
+| **`GUObjectArray.ObjObjects.Objects`** | **`0x9AA6170`** | `0x9AA4FF0` | `[ASM]` 814/814 sitios coinciden |
+| **`GUObjectArray.ObjObjects.NumElements`** | **`0x9AA6184`** | `0x9AA5004` | `[ASM]` = `Objects` + `0x14` |
+| `FNamePool` "ya inicializado" (bool) | `0x99C2767` | — | `[ASM]` flag de la init perezosa |
+| `GetPrivateStaticClassBody` | `0x1378880` | `0x1378740` | `[ASM]` 6.122 sitios |
+| `__security_cookie` | `0x9934600` (build vieja) | — | `[ASM]` **no es de engine**. Trampa E |
+
+> ⚠️ **Ningún RVA de esta tabla debe ir a fuego en el cliente.** Los tres que
+> importan (`FNamePool` y las dos `AddXInput`) se localizan **por firma de bytes
+> en runtime**, con el RVA de arriba solo como pista para el camino rápido.
+> Ver §2.3.
 
 > ⚠️ El código heredado usaba `GWorld = 0x93CFB50`. Ese RVA es de una build
 > anterior y **ya no es válido**.
 
 ### GUObjectArray — evidencia
-El mismo patrón aparece en `sub_141300030` y `sub_1414A0D50`:
+El patrón aparece 814 veces, y **las 814 apuntan a la misma global**:
 ```asm
 mov   eax, [rdi+0Ch]                  ; UObject::InternalIndex
-cmp   eax, cs:qword_149AA5004         ; NumElements
+cmp   eax, cs:qword_149AA6184         ; NumElements
 jge   short (fuera de rango)
 mov   ecx, eax
 movzx eax, ax                         ; idx & 0xFFFF
 shr   rcx, 10h                        ; idx >> 16  -> indice de chunk
 lea   rdx, [rax+rax*2]                ; (idx & 0xFFFF) * 3
-mov   rax, cs:qword_149AA4FF0         ; Objects
+mov   rax, cs:qword_149AA6170         ; Objects
 mov   rcx, [rax+rcx*8]                ; chunk = Objects[idx >> 16]
 lea   rbx, [rcx+rdx*8]                ; item = chunk + (idx & 0xFFFF) * 24
 mov   eax, [rbx+8]                    ; FUObjectItem::Flags
 ```
+Firma de bytes para volver a localizarlo tras un parche (0 falsos positivos):
+```
+48 8D 14 40  48 8B 05 <rel32>  48 8B 0C C8
+```
+El `rel32` del `mov rax, cs:...` resuelve a `Objects`; `NumElements` está en
+`Objects + 0x14` y la base de `FUObjectArray` en `Objects − 0x10`.
 De aquí salen, todos `[ASM]`:
 - **Chunk de 65536** objetos (`>> 16`), **stride de `FUObjectItem` = `0x18`** (`*3` luego `*8`).
 - `FUObjectItem`: `Object @0x00`, `Flags @0x08`.
@@ -133,19 +165,26 @@ De aquí salen, todos `[ASM]`:
 
 Recorrido:
 ```
-num  = *(int32*)(base + 0x9AA5004)                  // acotar a [0, 5.000.000]
-item = (*(uintptr**)(base + 0x9AA4FF0))[i >> 16] + (i & 0xFFFF) * 0x18
+num  = *(int32*)(base + 0x9AA6184)                  // acotar a [0, 5.000.000]
+item = (*(uintptr**)(base + 0x9AA6170))[i >> 16] + (i & 0xFFFF) * 0x18
 obj  = *(uintptr*)item
 flags= *(uint32*)(item + 8)                          // descartar los marcados
 ```
 
-### 2.2 `GNames` (`FNamePool`) — `0x99C1840` `[ASM]`
+### 2.2 `GNames` (`FNamePool`) — `0x99C29C0` `[ASM]`
 
-Evidencia, en `sub_14128B840` (resolución de `FName` a texto):
+Evidencia, en la resolución de `FName` a texto (`sub_14128B7F0` entre otras):
 ```asm
-lea   rcx, stru_1499C1840      ; el pool
-call  sub_14127BB90            ; init perezosa
+cmp   cs:byte_1499C2767, 0     ; ¿pool ya inicializado?
+jz    short init
+lea   r8, stru_1499C29C0       ; el pool
+jmp   short cont
+init:
+lea   rcx, stru_1499C29C0      ; el mismo pool
+call  sub_14127BCD0            ; init perezosa
 mov   r8, rax
+mov   cs:byte_1499C2767, 1
+cont:
 mov   edx, ebx                 ; idx
 movzx eax, bx                  ; idx & 0xFFFF
 shr   edx, 10h                 ; block = idx >> 16
@@ -169,6 +208,44 @@ De aquí:
 **Para qué se usa aquí:** nombres de hueso (`FMeshBoneInfo::Name@0x00`) para
 dibujar solo el esqueleto del cuerpo (§6), y nombre de clase de un pawn para
 distinguir jugador de dron (§7).
+
+> ⚠️ **Si `GNames` apunta mal, el síntoma NO es "no hay nombres": es un esqueleto
+> roto.** Los nombres salen basura, el filtro por nombre se cae al respaldo, y
+> sobre todo **los drones dejan de detectarse**, así que se les lee la pose como
+> si fueran personas y salen líneas disparadas. Fue exactamente lo que pasó con
+> el parche del 2026-09-03.
+
+### 2.3 Localización por firma en runtime (a prueba de parches)
+
+El parche del 2026-09-03 movió todo el código y todos los datos. Lo único que
+sobrevivió sin tocar nada fue `GWorld`, porque se buscaba en runtime. `GNames` y
+las funciones del aimbot estaban a fuego y se rompieron. **Ahora las tres se
+localizan por firma**, con el RVA conocido solo como camino rápido:
+
+1. Se prueba el RVA conocido y se **verifica**. Si cuadra, no se escanea nada.
+2. Si no cuadra, se recorre `.text` en bloques de 64 KB (con 64 B de solape para
+   no perder una firma partida entre bloques) buscando el patrón.
+3. Si tampoco aparece, se degrada con elegancia: sin nombres el ESP sigue
+   funcionando (esqueleto sin filtrar), y el aimbot cae a escribir
+   `RotationInput` directamente.
+
+**Firma de `FNamePool`** — 11 sitios en el binario, y en los 11 los dos `lea`
+resuelven a la misma dirección, así que la propia firma se autovalida:
+```
+74 09                 jz +9
+4C 8D 05 <rel32>      lea r8,  FNamePool
+EB 16                 jmp +0x16
+48 8D 0D <rel32>      lea rcx, FNamePool     <- debe dar el MISMO destino
+E8 <rel32>            call InitPool
+4C 8B C0              mov r8, rax
+C6 05 <rel32> 01      mov cs:bInitialized, 1
+```
+Comprobación funcional adicional: con el pool correcto, el `FName` de índice `0`
+resuelve a la cadena `"None"`.
+
+**Firma de `AddPitchInput` / `AddYawInput`** — la cola de la función en `+0x73`,
+con el offset del `FRotator` incrustado dos veces (por eso distingue el eje).
+Exactamente 3 coincidencias en todo el binario, una por eje. Ver §9.1.
 
 ### 2.1 `GWorld`: por qué se busca en runtime y no por RVA
 
@@ -199,25 +276,86 @@ como argumento a otras funciones, así que el patrón que delata a una global de
 UE apenas se da. Un barrido de las globales más leídas (ya excluyendo el cookie)
 no devuelve ninguna con accesos claros a campos de `UWorld`.
 
-**Solución adoptada: localizarlo y validarlo en runtime** (`ScanForGWorld`, en
-`reader.hpp`). Se recorren las secciones de datos escribibles y no ejecutables
-del módulo y, para cada qword alineado que parezca un puntero, se prueba la
-cadena real del juego:
+**Solución adoptada: localizar un ancla en runtime y confirmar el mundo en cada
+frame** (`ScanForWorldAnchor` / `ReadValues`, en `reader.hpp`).
+
+#### El error que hubo que corregir (parche 2026-09-03)
+
+La primera versión buscaba un qword de las secciones de datos del módulo que
+satisficiera esta cadena, y la reusaba como válida mientras siguiera
+satisfaciéndola:
 
 ```
-UWorld → OwningGameInstance(0x1D8) → LocalPlayers(0x38), Num en [1,8]
-       → LocalPlayers[0] → PlayerController(0x30) → PlayerCameraManager(0x360)
+UWorld → OwningGameInstance(0x1D8) → LocalPlayers(0x38) → [0]
+       → PlayerController(0x30) → PlayerCameraManager(0x360)
 ```
 
-Solo el `UWorld` verdadero la satisface entera; un falso positivo es
-prácticamente imposible. Hay una validación laxa (sin controller) para el menú
-principal, que solo se acepta si no apareció ningún candidato estricto.
+**Esa cadena no prueba nada sobre el mundo.** `UGameInstance` y `ULocalPlayer`
+son objetos que **persisten entre mapas**: los crea el motor una vez y no se
+destruyen al viajar. Por eso un `UWorld` ya destruido —cuya memoria sigue
+mapeada— la sigue satisfaciendo entera. Consecuencia real observada en partida:
+tras un cambio de mapa el cliente se quedaba anclado al mundo viejo, leía su
+`GameState` (vacío o muerto), el ESP no dibujaba nada, y **como la validación
+seguía pasando nunca se volvía a escanear**. Solo se arreglaba reinyectando.
+
+#### Diseño actual
+
+**1. Prueba de propiedad (lo que sí distingue un mundo de otro).**
+Un `UWorld` es el actual si y solo si el `PlayerArray` de *su* `GameState`
+contiene *tu* `APlayerState`:
+
+```
+ps  = PlayerController + 0x2B0            (AController::PlayerState)
+gs  = candidato        + 0x160            (UWorld::GameState)
+arr = gs + 0x2C0, num = gs + 0x2C8        (AGameStateBase::PlayerArray)
+      -> ¿alguno de los num punteros es igual a ps?
+```
+No usa ni un offset nuevo: los tres están verificados por reflexión. Y en un
+mapa nuevo tanto el `GameState` como los `APlayerState` son objetos nuevos, así
+que un mundo viejo **falla la prueba de inmediato**.
+
+**2. El ancla es solo una semilla.**
+Se guarda la *dirección del hueco* de datos del módulo, no el mundo. Aunque ese
+hueco quede desfasado, sigue sirviendo para llegar al `GameInstance`, que es
+persistente. De ahí se saca el `PlayerController` actual y, con él, el mundo
+actual por un camino independiente:
+
+```
+PlayerController → Outer(0x20) = ULevel → OwningWorld(0xC0) = UWorld actual
+```
+Si ese mundo pasa la prueba de propiedad, se usa **ese** y se re-ancla buscando
+un hueco que lo contenga. La recuperación es inmediata, sin reescaneo completo.
+
+> Este rescate es *seguro por construcción*: exige igualdad exacta de punteros
+> contra un candidato que ya pasó la prueba del roster. Si `Outer` no fuera el
+> `ULevel`, la lectura daría basura, la igualdad fallaría y simplemente no
+> rescataría — nunca puede dar un falso positivo. En ese caso se recurre al
+> reescaneo, que también arregla la situación, solo que más despacio.
+
+**3. Red de seguridad escalonada.**
+Si ni la semilla resuelve ni el mundo se confirma durante 120 frames seguidos
+(y solo cuando el roster no está vacío, es decir, cuando *debería* poder
+confirmarse), se fuerza un reescaneo completo. El umbral se **duplica** con cada
+intento fallido hasta ~2 min, para que un escenario legítimamente no confirmable
+no provoque un tirón cada dos segundos.
+
+**4. El escaneo elige por niveles, no por "el primero que valga".**
+Recorre todos los candidatos y se queda con el mejor:
+
+| Nivel | Qué cumple |
+|---|---|
+| 3 | cadena completa **y** roster contiene tu `PlayerState` → es el mundo actual |
+| 2 | cadena completa hasta `PlayerCameraManager` |
+| 1 | solo llega al `GameInstance` (menú principal, sin controller) |
+
+Corta en cuanto encuentra un nivel 3. Los niveles 1 y 2 mantienen el
+comportamiento anterior en el menú, donde todavía no hay partida.
 
 Ventajas frente al RVA fijo:
 - No depende de acertar una heurística.
-- **Sobrevive a los parches del juego sin tocar código.**
-- Se revalida en cada uso; si el puntero deja de valer (cambio de mapa), se
-  reescanea, con un tope de un escaneo por segundo.
+- **Sobrevive a los parches del juego sin tocar código** (comprobado: el parche
+  del 2026-09-03 no lo rompió).
+- Se confirma en cada frame contra un dato que solo el mundo actual tiene.
 
 > El código heredado usaba `GWorld = 0x93CFB50`, de una build antigua.
 
@@ -245,8 +383,18 @@ Tres detalles que hacen fallar la extracción si se pasan por alto:
 2. **El paquete también es UTF-16**, no ASCII.
 3. **La global va en `r8`**, o sea `4C 8D 05` (con REX.R), **no** `48 8D 05`.
 
-Resultado: **5.410 clases** con nombre, paquete, `sizeof` y RVA de su cache de
-`StaticClass`. **155** pertenecen a `/Script/Bodycam`.
+Un cuarto detalle, aprendido al repetir la extracción sobre la build nueva:
+4. **Hay tres enteros seguidos en la pila y el `sizeof` es el PRIMERO.** El orden
+   real de los argumentos apilados es `InSize`, `InAlignment`, `ClassFlags`, o sea
+   que en el flujo de bytes aparecen escritos al revés: primero `ClassFlags`
+   (valores enormes tipo `0x10000004`), luego la alineación (`8` o `0x10`) y por
+   último el `sizeof`. Quedarse con el primer entero que aparece da la
+   **alineación**, no el tamaño. Ese fallo metió tres tamaños equivocados en la
+   versión anterior de este documento (ver la nota bajo la tabla).
+
+Resultado: **5.391 clases** con nombre, paquete, `sizeof` y RVA de su cache de
+`StaticClass`. **156** pertenecen a `/Script/Bodycam`.
+`GetPrivateStaticClassBody` está ahora en `0x1378880` (6.122 sitios de llamada).
 
 > Las caches son **perezosas**: valen `0` hasta que el juego instancia esa clase.
 > Un `0` significa "todavía no disponible", no "error".
@@ -254,46 +402,60 @@ Resultado: **5.410 clases** con nombre, paquete, `sizeof` y RVA de su cache de
 ### Validación cruzada `[XVAL]`
 Todo offset de este documento cabe dentro del `sizeof` de su clase:
 
+RVAs de `StaticClass` **de la build 2026-09-03** (los `sizeof` no cambiaron):
+
 | Clase | `sizeof` | RVA StaticClass |
 |---|---|---|
-| `AActor` | `0x2A8` | `0x9be3c28` |
-| `APawn` | `0x328` | `0x9c098f8` |
-| `ACharacter` | `0x650` | `0x9be8e08` |
-| `AController` | `0x340` | `0x9bec6b8` |
-| `APlayerController` | `0x858` | `0x9c0af80` |
-| `APlayerState` | `0x360` | `0x9c0d488` |
-| `APlayerCameraManager` | `0x25A0` | `0x9be0d50` |
-| `AGameStateBase` | `0x300` | `0x9bf3e80` |
-| `UWorld` | `0x908` | `0x9c21230` |
-| `UGameInstance` | `0x1C0` | `0x9bf1128` |
-| `ULocalPlayer` | `0x2B0` | `0x9bfd9c0` |
-| `USceneComponent` | `0x2B8` | `0x9be1c18` |
-| `USkinnedMeshComponent` | `0x890` | `0x9be2210` |
-| `USkeletalMeshComponent` | `0xF40` | `0x9bebb38` |
-| `UCapsuleComponent` | `0x510` | `0x9be9e98` |
+| `AActor` | `0x2A8` | `0x9be4da8` |
+| `APawn` | `0x328` | `0x9c0aa78` |
+| `ACharacter` | `0x650` | `0x9be9f88` |
+| `AController` | `0x340` | `0x9bed838` |
+| `APlayerController` | `0x858` | `0x9c0c100` |
+| `APlayerState` | `0x360` | `0x9c0e608` |
+| `APlayerCameraManager` | `0x25A0` | `0x9be1ed0` |
+| `AGameStateBase` | `0x300` | `0x9bf5000` |
+| `UWorld` | `0x908` | `0x9c223b0` |
+| **`ULevel`** | **`0x320`** | `0x9bfe378` |
+| `UGameInstance` | `0x1C0` | `0x9bf22a8` |
+| `ULocalPlayer` | `0x2B0` | `0x9bfeb40` |
+| `USceneComponent` | **`0x230`** | `0x9be2d98` |
+| `USkinnedMeshComponent` | `0x890` | `0x9be3390` |
+| `USkeletalMeshComponent` | `0xF40` | `0x9beccb8` |
+| `UCapsuleComponent` | `0x510` | `0x9beb018` |
+
+> **Corrección:** la versión anterior de este documento daba
+> `USceneComponent = 0x2B8`, `UBodycamSurvivorComponent = 0x8D0` y
+> `UShotgunAttributeSet = 0x130`. Los tres estaban mal por el fallo de extracción
+> descrito arriba. Los valores reales, leídos del propio `call`, son `0x230`,
+> `0x110` y `0x60`. Ninguna conclusión del documento cambia: todos los offsets
+> siguen cabiendo. De hecho **dos encajan mejor ahora**:
+> `ComponentToWorld` (`0x1D0`+`0x60` = `0x230`) resulta ser el último miembro de
+> `USceneComponent`, y `DeathState@0x108` cabe justo en un
+> `UBodycamSurvivorComponent` de `0x110`, lo que refuerza que ese es su dueño (§7).
 
 ### Clases de `/Script/Bodycam` relevantes
 
 | Clase | `sizeof` | RVA StaticClass | Para qué |
 |---|---|---|---|
-| `ABodycamCharacter` | `0x680` | `0x9c64608` | pawn del jugador |
-| `ABodycamWeaponCharacter` | `0x710` | `0x9c66fe0` | pawn con arma (deriva del anterior `[DED]`) |
-| `ABodycamPlayerState` | `0x438` | `0x9c665c8` | equipo, nombre, kills |
-| `ABodycamPlayerController` | `0x8B0` | `0x9c665b0` | |
-| `ABodycamGameState` | `0x420` | `0x9c656f0` | roster |
-| `ABodycamPlayerCameraManager` | `0x25A0` | `0x9c66658` | cámara |
-| `ABodycamSpectatorPawn` | `0x358` | `0x9c66fb0` | espectador |
-| `ABodycamControllablePerk` | `0x368` | `0x9c645a8` | dron/perk controlable |
-| `UCharacterAttributeSet` | `0xD8` | `0x9c675c0` | **vida** |
-| `UWeaponAttributeSet` | `0x240` | `0x9c67c58` | |
-| `UShotgunAttributeSet` | `0x130` | `0x9c67ca0` | |
-| `UBodycamSurvivorComponent` | `0x8D0` | `0x9c670e8` | estado de muerte |
-| `UBodycamAbilitySystemComponent` | `0x1260` | `0x9c64200` | GAS |
-| `UBodycamTeamManagementComponent` | `0xB0` | `0x9c66f80` | |
-| `UBodycamEquipmentManagerComponent` | `0x140` | `0x9c64a90` | |
-| `UBodycamInventoryComponent` | `0xF8` | `0x9c65c80` | |
-| `UPawnExtensionComponent` | `0xE0` | `0x9c67a10` | |
-| `UBodycamRagdollComponent` | — | — | |
+| `ABodycamCharacter` | `0x680` | `0x9c65788` | pawn del jugador |
+| `ABodycamWeaponCharacter` | `0x710` | `0x9c681b0` | pawn con arma (deriva del anterior `[DED]`) |
+| `ABodycamPlayerState` | `0x438` | `0x9c67758` | equipo, nombre, kills |
+| `ABodycamPlayerController` | `0x8B0` | `0x9c67740` | |
+| `ABodycamGameState` | `0x420` | `0x9c66880` | roster |
+| `ABodycamGameMode` | `0x6E0` | `0x9c66388` | |
+| `ABodycamPlayerCameraManager` | `0x25A0` | `0x9c677e8` | cámara |
+| `ABodycamSpectatorPawn` | `0x358` | `0x9c68168` | espectador (deriva de `APawn`, **no** de `ACharacter`) |
+| `ABodycamControllablePerk` | `0x368` | `0x9c65728` | dron/perk controlable |
+| `UCharacterAttributeSet` | `0xD8` | `0x9c68788` | **vida** |
+| `UWeaponAttributeSet` | `0x240` | `0x9c68e20` | |
+| `UShotgunAttributeSet` | `0x60` | `0x9c68e68` | |
+| `UBodycamSurvivorComponent` | `0x110` | `0x9c682a0` | estado de muerte |
+| `UBodycamAbilitySystemComponent` | `0x1260` | `0x9c65380` | GAS |
+| `UBodycamTeamManagementComponent` | `0xB0` | `0x9c68138` | |
+| `UBodycamEquipmentManagerComponent` | `0x140` | `0x9c65c10` | |
+| `UBodycamInventoryComponent` | `0xF8` | `0x9c66e10` | |
+| `UPawnExtensionComponent` | `0xE0` | `0x9c68bd8` | |
+| `UBodycamRagdollComponent` | `0xC0` | `0x9c67c48` | |
 
 ---
 
@@ -310,17 +472,55 @@ FTransform (0x60): Rot @0x00 | Translation @0x20 | Scale3D @0x40   [ASM]
 `sizeof(FTransform) = 0x60` verificado `[ASM]`: el `memcpy` de `USkinnedMeshComponent`
 copia `32 * (3 * Num)` bytes = **96 B por elemento** (§6).
 
-### UObject
+### UObject — **layout completo verificado** `[ASM]`
 | Campo | Offset | Ev. |
 |---|---|---|
+| `UObject::ObjectFlags` | `0x08` | `[ASM]` |
 | `UObject::InternalIndex` | `0x0C` | `[ASM]` (§2, indexado de `GUObjectArray`) |
-| `UObject::Class` | `0x10` | `[DED]` |
-| `UObject::Name` (FName) | `0x18` | `[DED]` |
-| `UObject::Outer` | `0x20` | `[DED]` |
+| `UObject::Class` | `0x10` | `[ASM]` |
+| `UObject::Name` (FName) | `0x18` | `[ASM]` |
+| `UObject::Outer` | `0x20` | `[ASM]` |
 
-> `InternalIndex` está verificado. `Class`, `Name` y `Outer` son los estándar de
-> UE5 pero **no los verifiqué en este binario** porque el ESP no los necesita.
-> Verifícalos antes de usarlos.
+Evidencia directa, en el registro de un `UObjectBase` recién construido
+(`sub_1414A3DD0`), que pasa los cuatro campos como argumentos de golpe:
+```asm
+mov r9d, [rcx+8]      ; ObjectFlags
+mov r8,  [rcx+18h]    ; NamePrivate  (FName)
+mov rdx, [rcx+20h]    ; OuterPrivate
+mov rcx, [rcx+10h]    ; ClassPrivate
+call sub_1414A3B70
+...                   ; y la otra rama de la misma función:
+mov ebx, [rcx+0Ch]    ; InternalIndex
+```
+Y confirmación cruzada en `sub_1414ABE40`, que trata el `+0x10` como un objeto
+por derecho propio y lo indexa en `GUObjectArray` por su `InternalIndex`:
+```asm
+mov rax, [rsi+20h]                   ; Outer
+mov rbx, [rsi+10h]                   ; Class
+mov eax, [rbx+0Ch]                   ; Class->InternalIndex
+cmp eax, dword ptr cs:qword_149AA6184 ; NumElements
+```
+
+> Con esto `Class`, `Name` y `Outer` dejan de ser deducidos y salen de la lista
+> de pendientes. Es lo que permite la prueba de propiedad del mundo (§2.1) y la
+> detección de drones por nombre de clase (§7).
+
+### ULevel
+| Campo | Offset | Ev. |
+|---|---|---|
+| **`ULevel::OwningWorld`** | **`0xC0`** | `[REFL]` (`CPF_Transient`, `Object`) + `[ASM]` |
+| `ULevel::LevelScriptActor` | `0xF0` | `[REFL]` |
+| `ULevel::WorldSettings` | `0x2A8` | `[REFL]` |
+
+`0xC0` cabe de sobra en `sizeof(ULevel) = 0x320` ✔ `[XVAL]`. El `[ASM]` es el
+`GetLevel()->OwningWorld` que hace `AActor::GetWorld()`, visto inline en
+`sub_1453E3FE0`:
+```asm
+mov rax, [rdi+20h]      ; Outer del actor -> ULevel
+mov rcx, [rax+0C0h]     ; ULevel::OwningWorld
+```
+**El `Outer` de un actor es su `ULevel`.** Es el camino que usa el cliente para
+recuperar el mundo actual tras un cambio de mapa (§2.1).
 
 ### Cadena mundo → cámara
 | Ruta | Offset | Ev. |
@@ -625,6 +825,26 @@ Alternativa que evita el problema entero: **la caja se calcula como el bounding
 box de todos los huesos proyectados**. Sale ajustada a la postura real y no
 necesita saber qué hueso es cuál.
 
+### Guardia contra esqueletos disparados
+
+Leer la pose de un pawn que **no es un `ACharacter`** (un dron, un espectador)
+significa leer `+0x328` como si fuera `Mesh`, y ahí hay otra cosa. Si por
+casualidad ese qword es un puntero válido, todo lo demás se lee sin fallar y el
+resultado son líneas que salen disparadas por el mapa. Pasó con el parche del
+2026-09-03, porque al romperse `GNames` los drones dejaron de detectarse.
+
+Antes de transformar los huesos, se comprueban dos cosas sobre el
+`ComponentToWorld` de la malla, y si falla cualquiera se descarta la pose entera
+(contador `badMesh` en *Debug → Bone counters*):
+
+1. **La transformada tiene sentido**: cuaternión con norma² en `[0.5, 2]`, escala
+   en `[1e-4, 100]` en valor absoluto, traslación finita y por debajo de `1e7` cm.
+2. **La malla pertenece al actor**: su traslación está a menos de **5 m** de la
+   del `RootComponent` del pawn. En un personaje real la distancia es de ~1 m
+   (la malla cuelga del centro de la cápsula), así que 5 m no descarta nada
+   legítimo. Si no se puede leer el `RootComponent`, la comprobación se salta:
+   nunca esconde un esqueleto válido por no poder verificarlo.
+
 ---
 
 ## 7. Datos del juego
@@ -845,11 +1065,18 @@ Esto es una DLL dentro del juego: un fallo aquí **tumba el juego**, no al cheat
 
 Tres funciones de `APlayerController`, contiguas y de `0x8C` bytes cada una:
 
-| Función | RVA | Escribe | Escala |
-|---|---|---|---|
-| `AddPitchInput(float)` | **`0x3CB80F0`** | `RotationInput.Pitch @0x528` | `InputPitchScale @0x544` |
-| `AddRollInput(float)` | **`0x3CB8180`** | `RotationInput.Roll @0x538` | `InputRollScale @0x548` |
-| `AddYawInput(float)` | **`0x3CB8300`** | `RotationInput.Yaw @0x530` | `InputYawScale @0x540` |
+| Función | RVA (2026-09-03) | RVA anterior | Escribe | Escala |
+|---|---|---|---|---|
+| `AddPitchInput(float)` | **`0x3CB83C0`** | `0x3CB80F0` | `RotationInput.Pitch @0x528` | `InputPitchScale @0x544` |
+| `AddRollInput(float)` | **`0x3CB8450`** | `0x3CB8180` | `RotationInput.Roll @0x538` | `InputRollScale @0x548` |
+| `AddYawInput(float)` | **`0x3CB85D0`** | `0x3CB8300` | `RotationInput.Yaw @0x530` | `InputYawScale @0x540` |
+
+> El parche del 2026-09-03 las movió `0x2D0` bytes, **manteniendo el espaciado
+> relativo entre ellas** (`+0x90` y `+0x180`) y **sin tocar los offsets del
+> `FRotator`** (`0x528`/`0x530`/`0x538` siguen igual). Los RVAs de esta tabla son
+> solo una pista: el cliente los verifica y, si no cuadran, **los busca por firma**
+> (§2.3). Se comprobó sobre el binario nuevo que la búsqueda devuelve exactamente
+> `0x3CB83C0` y `0x3CB85D0`.
 
 Cuerpo (decompilado, `AddYawInput`):
 ```c
@@ -860,9 +1087,11 @@ else
 RotationInput.Yaw += delta;          // double @0x530
 ```
 
-**Firma para verificar en runtime.** Es lo que impide llamar a otra cosa si el
-juego se parchea. Prólogo en `+0x00` y cola en `+0x73`; el offset del `FRotator`
-va incrustado dos veces en la cola, así que **la firma distingue el eje**:
+**Firma para localizar y verificar en runtime.** Prólogo en `+0x00` y cola en
+`+0x73`; el offset del `FRotator` va incrustado dos veces en la cola, así que
+**la firma distingue el eje** y solo hay 3 coincidencias en todo el binario, una
+por eje. Se usa para las dos cosas: comprobar el RVA conocido y, si falla,
+buscarlas de cero recorriendo `.text`:
 ```
 +0x00  40 53                    push rbx
        48 83 EC 30              sub  rsp, 30h
@@ -909,8 +1138,13 @@ tratarlo aparte del ESP:
 | Pieza | Estado |
 |---|---|
 | `GUObjectArray` | ✅ **verificado** (§2) — ya se pueden enumerar todos los objetos |
-| `GNames` (`FNamePool`) | ❌ no localizado. El escaneo por `>>16` se lo come `GUObjectArray`, que usa el mismo patrón con 909 aciertos. Hay que buscarlo por `FName::ToString` o por el `*2` de `Resolve()` |
-| `ProgressEvent`/`ProcessEvent` | ❌ no localizado. Anclas disponibles: la string wide "Script call stack" en `0x147728320` y `0x147728350` |
+| `GNames` (`FNamePool`) | ✅ **verificado** (§2.2) — `0x99C29C0`, localizado por firma, ya se usa en el cliente para nombres de hueso y de clase |
+| `ProcessEvent` | ❌ **no localizado**. Es lo único que falta. Ancla: la cadena wide "Script call stack" (ojo: su dirección cambió con el parche, hay que volver a buscarla) |
+
+> Al buscar `GNames` hay una trampa: el patrón "`>>16` + índice `*8` + `lea` con
+> `*2`" lo cumple también `GUObjectArray` (909 aciertos frente a 1). Se
+> distinguen porque en `GUObjectArray` el índice y la base del `lea` son el
+> **mismo registro** (es un `*3`), y en `FNamePool` son distintos. Ver §2.2.
 
 ### 9.2 Soft aim / silent aim — por qué NO se implementó el "puro"
 
@@ -966,7 +1200,15 @@ una función inocua y comprobar estabilidad, y solo entonces (4) exponerlo en la
 
 ## 10. Cómo re-derivar todo tras un parche
 
-1. **`GWorld`**: §2, por perfil de lecturas/escrituras. No restar deltas.
+> **Lo que enseñó el parche del 2026-09-03**: cambiaron **todos** los RVAs y
+> **ninguno** de los offsets de clase. Así que lo primero es siempre comprobar si
+> los offsets siguen valiendo (rápido, por reflexión) antes de sospechar de ellos.
+> Ver §12 para el procedimiento exacto y el resultado de esa comprobación.
+
+0. **Firmas primero.** `FNamePool`, `GUObjectArray` y las `AddXInput` tienen firma
+   de bytes documentada (§2, §2.3, §9.1). Búscalas con `find_bytes` y listo; no
+   hace falta re-derivar nada.
+1. **`GWorld`**: §2.1. No se deriva: se busca en runtime. No restar deltas.
 2. **Offsets de propiedad**: buscar el nombre ASCII en `.rdata`, localizar los
    qwords alineados a 8 que lo referencian (son `FPropertyParams`), leer
    `Offset` en `+0x32` (uint16). Descartar los que tengan `CPF_Parm` (`0x80`):
@@ -1011,37 +1253,181 @@ sanity check), `+0x38 SetBitFunc` (decompilarla da byte y máscara exactos).
   en **ASCII**.
 - El compilador no emite `imul r, r, 0x60` para indexar `FTransform`: usa
   `lea r,[r+r*2]` + `shl r,5`. Lo mismo con `0x18` (`lea` + `shl 3`).
+- Para localizar una global a la que se accede desde muchos sitios, **cuenta los
+  destinos y quédate con el que gane por goleada**. `GUObjectArray` sale 814/814
+  y `FNamePool` 11/11. Una global que aparece una sola vez casi siempre es ruido.
+- Las firmas que llevan **la misma dirección dos veces** (los dos `lea` del bloque
+  de `FNamePool`) se autovalidan: si los dos `rel32` no resuelven al mismo sitio,
+  no es la firma.
+- Antes de dar por bueno un `sizeof` sacado de `GetPrivateStaticClassBody`,
+  **mira el desensamblado de un caso concreto**. Hay tres enteros seguidos en la
+  pila y es fácil quedarse con la alineación (§3).
 
 ---
 
-## 12. Pendiente
+## 12. Qué comprobar cuando el juego se actualiza
+
+Procedimiento seguido tras el parche del 2026-09-03, y resultado.
+
+### Paso 1 — ¿cambió el binario?
+```
+imagebase, número de funciones y segmentos
+```
+394.552 → **394.579** funciones y `.text` `0x1000` más grande. Binario nuevo.
+
+### Paso 2 — ¿se movieron los offsets de clase? (5 minutos, decide todo lo demás)
+Extraer por reflexión los offsets de las props clave y compararlos con este
+documento. Nombres a comprobar como mínimo:
+
+`OwningGameInstance`, `GameState`, `LocalPlayers`, `PlayerController`,
+`AspectRatioAxisConstraint`, `AcknowledgedPawn`, `PlayerCameraManager`,
+`CameraCachePrivate`, `PlayerArray`, `PawnPrivate`, `PlayerNamePrivate`,
+`TeamId`, `RootComponent`, `Mesh`, `CapsuleComponent`, `CapsuleHalfHeight`,
+`SkinnedAsset`, `LeaderPoseComponent`, `CharacterSet`, `Health`, `MaxHealth`,
+`ControlRotation`, `PlayerState`, `Controller`.
+
+**Resultado 2026-09-03: los 24 idénticos.** Ni uno se movió. Los offsets sacados
+por ASM (`ComponentToWorld@0x1D0`, `CST@0x598`, `CurrentRead@0x5E0`,
+`RotationInput@0x528`, vtable slot `0x330`) también se re-verificaron: idénticos.
+
+### Paso 3 — RVAs
+**Estos sí cambian siempre.** Búscalos por firma (§2, §2.3, §9.1), no por delta:
+
+| Qué | Firma |
+|---|---|
+| `FNamePool` | `74 09 4C 8D 05 ?? ?? ?? ?? EB 16 48 8D 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? 4C 8B C0 C6 05 ?? ?? ?? ?? 01` |
+| `GUObjectArray.Objects` | `48 8D 14 40 48 8B 05 ?? ?? ?? ?? 48 8B 0C C8` |
+| `AddPitch/Roll/YawInput` | cola en `+0x73`: `0F 5A C0 F2 0F 58 83 <off32> F2 0F 11 83 <off32> 48 83 C4 30 5B C3` |
+
+### Paso 4 — comprobar que el cliente arranca solo
+En *Debug*:
+- **Names (GNames)** debe decir "at known RVA (verified)" o "found by signature".
+  Si dice "found by signature", **actualiza `kRVA_GNames_Hint`** en
+  `game_names.hpp` para que la próxima vez no tenga que escanear.
+- **Engine function** debe listar los dos RVAs y decir de dónde salieron. Mismo
+  criterio: si salieron del escaneo, actualiza las constantes de `game_calls.hpp`.
+- **World anchor / Chain** debe llegar a `World confirmed: yes`.
+
+El cliente **funciona igual aunque no actualices las pistas**; solo se come un
+escaneo de `.text` (unas decenas de ms) una vez al inyectar.
+
+---
+
+## 13. Pendiente
 
 Nada de esto bloquea el ESP; son mejoras o cosas que solo se pueden cerrar en partida.
 
-**Solo verificable jugando**
-1. Qué valor tiene `AspectRatioAxisConstraint` en este juego (el código ya lo lee;
-   falta anotarlo aquí).
+**Solo verificable jugando** — el cliente ya muestra todo esto en *Debug*
+1. **Nombre de clase del pawn local** (*Debug → Names (GNames)*). Si sale un
+   nombre real, `GNames` y `UObject::Class@0x10`/`Name@0x18` quedan confirmados
+   de punta a punta. **Es la comprobación más valiosa que falta.**
 2. `MaxHealth` real (¿100?), para escalar la barra de vida.
 3. Si `POV.FOV @0x1450` cambia al apuntar con mira.
 4. Que `TeamId` distinga bandos de verdad en los modos por equipos (en un modo
    libre para todos puede valer lo mismo para todos).
+5. Que el filtro de huesos por nombre funcione: *Bone counters → `named X/Y`*
+   debería dar `named == total`, y `body bones` rondar 20 por modelo.
+6. Si con `FOV Axis` en **Auto** la proyección cuadra, ahora que `FOV Scale`
+   está calibrado a 1.150. Aclararía la discrepancia del eje (§5).
+
+7. Que el ancla del mundo se recupere sola al cambiar de mapa:
+   *Debug → World anchor → `Map-change recoveries`* debería subir, y
+   *Chain → `World confirmed`* volver a **yes** sin reinyectar (§2.1).
 
 **Requiere más análisis en IDA**
-5. `GNames` y `ProcessEvent` — no localizados (`GUObjectArray` sí, §2).
-   Necesarios para nombres de `FName` en runtime y para llamar funciones (§9).
-6. `UObject::Class/Name/Outer` — asumidos estándar, sin verificar
-   (`InternalIndex@0x0C` sí está verificado).
-7. Dueño real del componente con `DeathState@0x108`, y cómo llegar a él desde el
-   pawn.
-8. `ULevel::Actors` para ESP de objetos del mundo: **no es UPROPERTY** en UE5, no
-   sale por reflexión. Anclas: `UWorld::PersistentLevel@0x30`,
-   `UWorld::Levels@0x178`.
-9. Armas: `UBodycamEquipmentManagerComponent` / `UBodycamInventoryComponent`
-   para un ESP de arma equipada.
+8. `ProcessEvent` — **no localizado**. Es lo único que falta para poder llamar
+   `UFunction`s (`GUObjectArray` §2 y `GNames` §2.2 **sí** están localizados).
+   Ancla disponible: la cadena wide "Script call stack".
+9. Dueño real del componente con `DeathState@0x108`. El `sizeof` corregido de
+   `UBodycamSurvivorComponent` (`0x110`) encaja justo, lo que lo hace muy
+   probable, pero sigue sin haber una prop reflexionada que lleve del pawn a ese
+   componente. Hoy se usa `Health > 0` para saber si alguien está vivo.
+10. `ABodycamSpectatorPawn` (`0x358`) deriva de `APawn`, no de `ACharacter`, pero
+    `ClassifyPawn` lo clasifica como jugador porque su nombre contiene "Pawn".
+    No provoca ningún fallo visible —el guardia de malla (§6) descarta su pose y
+    la caja sale de la cápsula con valores acotados— pero si algún día molesta,
+    la solución es tratarlo como "pawn que no es Character", igual que el dron.
+11. `ULevel::Actors` para ESP de objetos del mundo: **no es UPROPERTY** en UE5,
+    no sale por reflexión. Anclas: `UWorld::PersistentLevel@0x30`,
+    `UWorld::Levels@0x178`. Alternativa ya disponible: recorrer `GUObjectArray`
+    e identificar el tipo comparando `UObject::Class` con las caches de
+    `StaticClass` extraídas (§3) — no hace falta `ULevel::Actors`.
+12. Armas: `UBodycamEquipmentManagerComponent` / `UBodycamInventoryComponent`
+    para un ESP de arma equipada.
+13. La ruta de disparo, para el silent aim puro (§9.2).
 
 ---
 
-## 13. Changelog
+## 14. Changelog
+
+### 2026-09-04 — Parche del juego (2026-09-03): re-derivación y anti-fragilidad
+
+El juego se actualizó y aparecieron dos fallos: el ESP se quedaba "colgado" en
+`fail` hasta reinyectar, y el esqueleto se dibujaba mal. **Las dos causas eran
+distintas y las dos estaban en el cliente, no en el juego.**
+
+#### Qué cambió el parche
+- Binario nuevo: **394.579 funciones** (antes 394.552), `.text` `0x1000` mayor.
+- **Todos los RVAs se movieron.** Los datos por `0x1180`, el código por otra
+  cantidad distinta (`0x2D0` en el caso de las `AddXInput`). No hay un delta
+  único: **no se pueden restar deltas**.
+- **Ni un solo offset de clase cambió.** Se re-verificaron 24 props por reflexión
+  y 5 offsets por ASM: todos idénticos. También los `sizeof`. Ver §12.
+- `/Script/Bodycam` pasa de 155 a **156** clases; ninguna de las relevantes cambió.
+
+#### Fallo 1 — el ancla del mundo se quedaba pegada a un mundo muerto
+**Causa raíz** (§2.1, trampa F): la validación del `UWorld` recorría
+`UWorld → GameInstance → LocalPlayer → PlayerController`, pero `GameInstance` y
+`LocalPlayer` **sobreviven al cambio de mapa**. Un `UWorld` ya destruido seguía
+pasando la validación indefinidamente, así que el cliente leía el `GameState`
+del mapa anterior y **nunca volvía a buscar**. Reinyectar era el único arreglo.
+
+**Corrección**:
+- Prueba de propiedad específica del mundo: el `PlayerArray` de su `GameState`
+  tiene que contener tu propio `APlayerState`. Sin offsets nuevos.
+- Recuperación inmediata por `PlayerController → Outer → ULevel::OwningWorld`,
+  con re-anclaje automático. Es seguro por construcción: exige igualdad exacta
+  de punteros, así que solo puede fallar en dejar de rescatar, nunca en dar un
+  falso positivo.
+- Red de seguridad con umbral que se duplica (120 frames → ~2 min) para que un
+  caso legítimamente no confirmable no cause un tirón cada dos segundos.
+- El escaneo pasa a elegir **por niveles** en vez de "el primero que valga".
+
+#### Fallo 2 — el esqueleto se dibujaba mal
+**Causa raíz**: `GNames` tenía el RVA a fuego (`0x99C1840`), que el parche movió
+a `0x99C29C0`. Sin nombres válidos, **los drones dejaban de detectarse**, así que
+se les leía la pose como si fueran personajes y salían líneas disparadas.
+
+**Corrección**:
+- `FNamePool` se localiza **por firma de bytes** (§2.3), con el RVA solo como
+  pista rápida. Firma autovalidante (dos `lea` al mismo destino) y comprobación
+  funcional (`FName` 0 = `"None"`).
+- Guardia de malla (§6): se descarta la pose si la transformada no tiene sentido
+  o si la malla está a más de 5 m del `RootComponent` del actor. Con contador
+  `badMesh` en *Debug*.
+
+#### Anti-fragilidad general
+- `AddPitchInput` / `AddYawInput` también pasan a localizarse por firma. Sus RVAs
+  nuevos son `0x3CB83C0` y `0x3CB85D0`.
+- Se verificó sobre el binario nuevo, simulando el matcher byte a byte, que las
+  tres búsquedas devuelven exactamente las direcciones correctas.
+- El escaneo de `.text` va en bloques de 64 KB con 64 B de solape, y solo corre
+  si la pista falla. Reintentos acotados (máx. 3, con 2 s de espera) para que un
+  fallo no dispare un escaneo por cada nombre leído.
+
+#### Descubrimientos nuevos
+- **`UObject::Class@0x10`, `Name@0x18` y `Outer@0x20` verificados por ASM**
+  (antes `[DED]`), junto con `ObjectFlags@0x08`.
+- **`ULevel::OwningWorld@0xC0`** `[REFL]`+`[ASM]`, y confirmado que el `Outer` de
+  un actor es su `ULevel`.
+- `GUObjectArray` re-localizado (`0x9AA6170`) con firma documentada.
+- Corregidos tres `sizeof` mal extraídos: `USceneComponent` `0x230` (no `0x2B8`),
+  `UBodycamSurvivorComponent` `0x110` (no `0x8D0`), `UShotgunAttributeSet` `0x60`
+  (no `0x130`). El de `UBodycamSurvivorComponent` refuerza que es el dueño de
+  `DeathState@0x108`.
+- Nueva §12 con el procedimiento de comprobación tras cada parche.
+
+Compila con 0 errores y 0 warnings, también con `/W4`.
 
 ### 2026-09-02 — Primer análisis completo del binario
 - Identificado el módulo del juego (`/Script/Bodycam`) y extraídas **5.410 clases**

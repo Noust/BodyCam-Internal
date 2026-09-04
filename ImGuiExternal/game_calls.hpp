@@ -5,9 +5,13 @@
 
 namespace GameCalls {
 
-	inline constexpr DWORD64 kRVA_AddPitchInput = 0x3CB80F0;
-	inline constexpr DWORD64 kRVA_AddRollInput  = 0x3CB8180;
-	inline constexpr DWORD64 kRVA_AddYawInput   = 0x3CB8300;
+	inline constexpr DWORD64 kRVA_AddPitchInput = 0x3CB83C0;
+	inline constexpr DWORD64 kRVA_AddRollInput  = 0x3CB8450;
+	inline constexpr DWORD64 kRVA_AddYawInput   = 0x3CB85D0;
+
+	inline constexpr size_t kFnSize = 0x8C;
+	inline constexpr size_t kTailOffset = 0x73;
+	inline constexpr size_t kTailLen = 25;
 
 	using AddInputFn = void(__fastcall*)(void* playerController, float value);
 
@@ -16,7 +20,11 @@ namespace GameCalls {
 		AddInputFn addYaw = nullptr;
 		bool  attempted = false;
 		bool  ok = false;
-		char  status[160] = "not resolved yet";
+		bool  foundByScan = false;
+		DWORD scanMs = 0;
+		DWORD64 rvaPitch = 0;
+		DWORD64 rvaYaw = 0;
+		char  status[192] = "not resolved yet";
 	};
 	inline Resolved g_Calls;
 
@@ -35,9 +43,9 @@ namespace GameCalls {
 	}
 
 	inline bool VerifySignature(uintptr_t fn, uint32_t wantOffset) {
-		if (!IsValidPtr(fn) || !IsExecutable(fn, 0x8C)) return false;
+		if (!IsValidPtr(fn) || !IsExecutable(fn, kFnSize)) return false;
 
-		uint8_t b[0x8C] = {};
+		uint8_t b[kFnSize] = {};
 		if (!readBytes(fn, b, sizeof(b))) return false;
 
 		static const uint8_t kProlog[12] = {
@@ -45,7 +53,7 @@ namespace GameCalls {
 		};
 		if (memcmp(b, kProlog, sizeof(kProlog)) != 0) return false;
 
-		const uint8_t* t = b + 0x73;
+		const uint8_t* t = b + kTailOffset;
 		if (!(t[0] == 0x0F && t[1] == 0x5A && t[2] == 0xC0)) return false;
 		if (!(t[3] == 0xF2 && t[4] == 0x0F && t[5] == 0x58 && t[6] == 0x83)) return false;
 		uint32_t off1 = 0; memcpy(&off1, t + 7, 4);
@@ -58,33 +66,83 @@ namespace GameCalls {
 		return true;
 	}
 
+	struct FnScanCtx {
+		uint32_t  wantPitch;
+		uint32_t  wantYaw;
+		uintptr_t pitch;
+		uintptr_t yaw;
+	};
+
+	inline bool FnScanChunk(const uint8_t* b, size_t len, uintptr_t va, void* ctx) {
+		FnScanCtx* c = static_cast<FnScanCtx*>(ctx);
+		if (len < kTailLen) return false;
+		const size_t last = len - kTailLen;
+		for (size_t i = 0; i <= last; ++i) {
+			if (b[i] != 0x0F || b[i + 1] != 0x5A || b[i + 2] != 0xC0) continue;
+			if (b[i + 3] != 0xF2 || b[i + 4] != 0x0F || b[i + 5] != 0x58 || b[i + 6] != 0x83) continue;
+			if (b[i + 11] != 0xF2 || b[i + 12] != 0x0F || b[i + 13] != 0x11 || b[i + 14] != 0x83) continue;
+			if (b[i + 19] != 0x48 || b[i + 20] != 0x83 || b[i + 21] != 0xC4 ||
+			    b[i + 22] != 0x30 || b[i + 23] != 0x5B || b[i + 24] != 0xC3) continue;
+
+			uint32_t o1 = 0, o2 = 0;
+			memcpy(&o1, b + i + 7, sizeof(o1));
+			memcpy(&o2, b + i + 15, sizeof(o2));
+			if (o1 != o2) continue;
+
+			const uintptr_t tail = va + i;
+			if (tail < kTailOffset) continue;
+			const uintptr_t fn = tail - kTailOffset;
+
+			if (o1 == c->wantPitch && !c->pitch && VerifySignature(fn, o1)) c->pitch = fn;
+			else if (o1 == c->wantYaw && !c->yaw && VerifySignature(fn, o1)) c->yaw = fn;
+
+			if (c->pitch && c->yaw) return true;
+		}
+		return false;
+	}
+
 	inline void Resolve() {
 		if (g_Calls.attempted) return;
 		g_Calls.attempted = true;
 
-		const DWORD64 base = (DWORD64)GetModuleHandleA("Bodycam-Win64-Shipping.exe");
+		const uintptr_t base = GameModuleBase();
 		if (!base) {
 			strcpy_s(g_Calls.status, "game module not found (not injected?)");
 			return;
 		}
 
-		const uintptr_t pitch = (uintptr_t)base + kRVA_AddPitchInput;
-		const uintptr_t yaw = (uintptr_t)base + kRVA_AddYawInput;
+		uintptr_t pitch = base + static_cast<uintptr_t>(kRVA_AddPitchInput);
+		uintptr_t yaw = base + static_cast<uintptr_t>(kRVA_AddYawInput);
 
-		const bool okPitch = VerifySignature(pitch, offset::rotation_input_pitch);
-		const bool okYaw = VerifySignature(yaw, offset::rotation_input_yaw);
+		bool okPitch = VerifySignature(pitch, offset::rotation_input_pitch);
+		bool okYaw = VerifySignature(yaw, offset::rotation_input_yaw);
 
 		if (!okPitch || !okYaw) {
-			sprintf_s(g_Calls.status,
-			          "signature mismatch (pitch=%d yaw=%d) - game patched? using direct write",
-			          (int)okPitch, (int)okYaw);
-			return;
+			FnScanCtx c{ offset::rotation_input_pitch, offset::rotation_input_yaw, 0, 0 };
+			const DWORD t0 = GetTickCount();
+			ScanCodeChunks(&FnScanChunk, &c);
+			g_Calls.scanMs = GetTickCount() - t0;
+
+			if (c.pitch && c.yaw) {
+				pitch = c.pitch; yaw = c.yaw;
+				g_Calls.foundByScan = true;
+			}
+			else {
+				sprintf_s(g_Calls.status,
+				          "AddPitch/AddYawInput not found (hint %d/%d, scan %d/%d, %u ms) - using direct write",
+				          (int)okPitch, (int)okYaw, (int)(c.pitch != 0), (int)(c.yaw != 0), g_Calls.scanMs);
+				return;
+			}
 		}
 
 		g_Calls.addPitch = reinterpret_cast<AddInputFn>(pitch);
 		g_Calls.addYaw = reinterpret_cast<AddInputFn>(yaw);
+		g_Calls.rvaPitch = static_cast<DWORD64>(pitch - base);
+		g_Calls.rvaYaw = static_cast<DWORD64>(yaw - base);
 		g_Calls.ok = true;
-		strcpy_s(g_Calls.status, "AddPitchInput / AddYawInput verified");
+		sprintf_s(g_Calls.status, "AddPitchInput 0x%llX / AddYawInput 0x%llX verified (%s)",
+		          (unsigned long long)g_Calls.rvaPitch, (unsigned long long)g_Calls.rvaYaw,
+		          g_Calls.foundByScan ? "by signature scan" : "known RVA");
 	}
 
 	__declspec(noinline) inline bool SafeInvoke(AddInputFn fn, void* pc, float v) {

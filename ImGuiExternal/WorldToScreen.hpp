@@ -3,6 +3,7 @@
 #include <vector>
 #include <unordered_map>
 #include <algorithm>
+#include <cmath>
 
 static char g_boneDebug[256] = "waiting...";
 
@@ -143,10 +144,43 @@ inline std::unordered_map<uintptr_t, SkeletonInfo> g_SkelCache;
 inline int g_RefSkelOffset = -1;
 
 struct BoneDiag {
-	int noMesh = 0, noPose = 0, noAsset = 0, noHierarchy = 0, drawn = 0;
-	void reset() { noMesh = noPose = noAsset = noHierarchy = drawn = 0; }
+	int noMesh = 0, noPose = 0, noAsset = 0, noHierarchy = 0, badMesh = 0, drawn = 0;
+	void reset() { noMesh = noPose = noAsset = noHierarchy = badMesh = drawn = 0; }
 };
 inline BoneDiag g_BoneDiag;
+
+inline constexpr double kMaxMeshOffsetCm = 500.0;
+inline constexpr double kMaxWorldCoordCm = 1.0e7;
+
+inline bool TransformLooksSane(const FTransform& t) {
+	const double qn = t.rot.x * t.rot.x + t.rot.y * t.rot.y + t.rot.z * t.rot.z + t.rot.w * t.rot.w;
+	if (!(qn == qn) || qn < 0.5 || qn > 2.0) return false;
+
+	const double sx = fabs(t.scale.x), sy = fabs(t.scale.y), sz = fabs(t.scale.z);
+	if (!(sx == sx) || !(sy == sy) || !(sz == sz)) return false;
+	if (sx < 1e-4 || sy < 1e-4 || sz < 1e-4) return false;
+	if (sx > 100.0 || sy > 100.0 || sz > 100.0) return false;
+
+	const double tx = t.translation.x, ty = t.translation.y, tz = t.translation.z;
+	if (!(tx == tx) || !(ty == ty) || !(tz == tz)) return false;
+	if (fabs(tx) > kMaxWorldCoordCm || fabs(ty) > kMaxWorldCoordCm || fabs(tz) > kMaxWorldCoordCm) return false;
+	return true;
+}
+
+inline bool MeshBelongsToPawn(uintptr_t pawn, const FTransform& c2w) {
+	uintptr_t root = 0;
+	if (!readPtr(pawn + offset::root_component, root)) return true;
+	fvector rootPos{};
+	if (!readRaw<fvector>(root + offset::c2w_translation, rootPos)) return true;
+	if (!(rootPos.x == rootPos.x) || !(rootPos.y == rootPos.y) || !(rootPos.z == rootPos.z)) return true;
+
+	const double dx = c2w.translation.x - rootPos.x;
+	const double dy = c2w.translation.y - rootPos.y;
+	const double dz = c2w.translation.z - rootPos.z;
+	const double d2 = dx * dx + dy * dy + dz * dz;
+	if (!(d2 == d2)) return false;
+	return d2 <= kMaxMeshOffsetCm * kMaxMeshOffsetCm;
+}
 
 inline fquat QuatMul(const fquat& a, const fquat& b) {
 	fquat r;
@@ -384,6 +418,11 @@ inline bool ReadPawnPose(uintptr_t pawn, PawnPose& out) {
 	FTransform c2w{};
 	if (!readRaw<FTransform>(meshComp + offset::component_to_world, c2w)) {
 		g_BoneDiag.noPose++;
+		return false;
+	}
+
+	if (!TransformLooksSane(c2w) || !MeshBelongsToPawn(pawn, c2w)) {
+		g_BoneDiag.badMesh++;
 		return false;
 	}
 
